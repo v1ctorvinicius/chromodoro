@@ -68,8 +68,10 @@ class ProjectView(ctk.CTkFrame):
         stats_frame.grid(row=next_row + 3, column=0, sticky="ew", padx=32, pady=(0, 10))
 
         stats = project_service.project_stats(self._project_id)
+        today_secs = project_service.today_seconds(self._project_id)
         blocks = [
             (format_duration(stats.total_seconds), "Time invested"),
+            (format_duration(today_secs), "Today"),
             (str(stats.session_count), "Sessions"),
             (str(stats.contribution_count), "Contributions"),
             (str(stats.notes_count), "Notes"),

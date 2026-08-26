@@ -78,6 +78,36 @@ class MiniView(ctk.CTkToplevel):
             command=self._on_close,
         ).pack(side="left", padx=2)
 
+        self._normal_widgets = [self._dot, self._clock_label, self._name_label, btn_frame]
+
+        self._completion_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self._completion_label = ctk.CTkLabel(
+            self._completion_frame,
+            text="Session done!",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            anchor="w",
+        )
+        self._completion_label.pack(side="left", padx=(12, 8))
+        self._log_btn = ctk.CTkButton(
+            self._completion_frame,
+            text="Log",
+            width=50,
+            height=28,
+            command=lambda: None,
+        )
+        self._log_btn.pack(side="left", padx=2)
+        self._skip_btn = ctk.CTkButton(
+            self._completion_frame,
+            text="Skip",
+            width=50,
+            height=28,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray60", "gray35"),
+            command=lambda: None,
+        )
+        self._skip_btn.pack(side="left", padx=(2, 10))
+
     def _start_drag(self, event):
         self._drag_x = event.x
         self._drag_y = event.y
@@ -99,3 +129,30 @@ class MiniView(ctk.CTkToplevel):
         self._dot.configure(text_color="#66bb6a" if running else "#ffb74d")
         bg = ("#d7f2da", "#12351a") if running else ("#fdeeca", "#3a2c0e")
         self.configure(fg_color=bg)
+
+    def show_completion(self, elapsed_text: str, on_log, on_skip):
+        for w in self._normal_widgets:
+            w.grid_forget()
+        self._completion_label.configure(text=f"Session done!  +{elapsed_text}")
+        self._log_btn.configure(command=on_log)
+        self._skip_btn.configure(command=on_skip)
+        self._completion_frame.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(16, 0))
+        self.configure(fg_color=("#e3f2fd", "#0d1b2a"))
+
+    def show_break(self, break_text: str, on_start):
+        for w in self._normal_widgets:
+            w.grid_forget()
+        self._completion_label.configure(text=f"Break done!  {break_text}")
+        self._log_btn.configure(text="Start", command=on_start)
+        self._skip_btn.configure(text="Skip", command=on_start)
+        self._completion_frame.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(16, 0))
+        self.configure(fg_color=("#fff3e0", "#2c1a00"))
+
+    def show_normal(self):
+        self._completion_frame.grid_forget()
+        self._dot.grid(row=0, column=0, padx=(12, 4), pady=(14, 0))
+        self._clock_label.grid(row=0, column=1, sticky="w", pady=(14, 0))
+        self._name_label.grid(row=1, column=1, sticky="w")
+        btn_frame = self._normal_widgets[3]
+        btn_frame.grid(row=0, column=2, rowspan=2, padx=(0, 10), pady=(14, 0))
+        self.configure(fg_color=("#d7f2da", "#12351a"))

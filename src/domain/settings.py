@@ -15,6 +15,7 @@ class AppSettings:
     sound_alerts: bool = True
     auto_start_after_break: bool = False
     close_to_tray: bool = True
+    start_in_tray: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "work_minutes", _clamp(int(self.work_minutes), MIN_MINUTES, MAX_MINUTES))
@@ -30,6 +31,7 @@ class AppSettings:
         object.__setattr__(self, "sound_alerts", bool(self.sound_alerts))
         object.__setattr__(self, "auto_start_after_break", bool(self.auto_start_after_break))
         object.__setattr__(self, "close_to_tray", bool(self.close_to_tray))
+        object.__setattr__(self, "start_in_tray", bool(self.start_in_tray))
 
 
 def _clamp(value: int, low: int, high: int) -> int:

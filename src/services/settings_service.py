@@ -19,6 +19,7 @@ class SettingsService:
                 sound_alerts=self._bool_setting("sound_alerts", True),
                 auto_start_after_break=self._bool_setting("auto_start_after_break", False),
                 close_to_tray=self._bool_setting("close_to_tray", True),
+                start_in_tray=self._bool_setting("start_in_tray", False),
             )
         return self._cache
 
@@ -31,6 +32,7 @@ class SettingsService:
             sound_alerts=settings.sound_alerts,
             auto_start_after_break=settings.auto_start_after_break,
             close_to_tray=settings.close_to_tray,
+            start_in_tray=settings.start_in_tray,
         )
         for key, value in (
             ("work_minutes", validated.work_minutes),
@@ -40,6 +42,7 @@ class SettingsService:
             ("sound_alerts", int(validated.sound_alerts)),
             ("auto_start_after_break", int(validated.auto_start_after_break)),
             ("close_to_tray", int(validated.close_to_tray)),
+            ("start_in_tray", int(validated.start_in_tray)),
         ):
             self._db.set_setting(key, str(value))
         self._cache = None

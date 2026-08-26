@@ -107,7 +107,7 @@ class Dashboard(ctk.CTkFrame):
         ).pack(side="left", padx=6)
         if self._on_widget is not None:
             ctk.CTkButton(
-                exports, text="\u25A1 Widget", width=80, height=26, fg_color="transparent",
+                exports, text="\u25A1 Mini Widget", width=80, height=26, fg_color="transparent",
                 border_width=1, border_color=("gray70", "gray30"),
                 text_color=("gray30", "gray65"), command=self._on_widget,
             ).pack(side="left", padx=(12, 6))
@@ -195,6 +195,8 @@ class Dashboard(ctk.CTkFrame):
                 ).pack(anchor="w", pady=(2, 0))
 
         meta_parts = [format_duration(summary.total_seconds), f"{summary.session_count} sessions"]
+        if summary.today_seconds > 0:
+            meta_parts.append(f"{format_duration(summary.today_seconds)} today")
         meta_text = "  ·  ".join(meta_parts)
         if summary.contribution_count:
             meta_text += f"  ·  {summary.contribution_count} contributions"

@@ -80,6 +80,13 @@ class ChromodoroApp(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._recover_pending_sessions()
         self._schedule_tick()
+        self._tray.start()
+        self._update_tray_tooltip()
+        try:
+            if self._settings.load().start_in_tray:
+                self.withdraw()
+        except Exception:
+            pass
 
     def report_callback_exception(self, exc, val, tb) -> None:
         if isinstance(val, TclError) and (
@@ -197,6 +204,48 @@ class ChromodoroApp(ctk.CTk):
         if chosen is not None:
             self._sessions.switch_to(chosen)
             self._refresh_mini()
+
+    def _mini_log(self, session) -> None:
+        from ui.dialogs import TextPromptDialog
+
+        dialog = TextPromptDialog(
+            self,
+            title="Log contribution",
+            label="What did you accomplish?",
+            ok_text="Log",
+            empty_message="Write something first.",
+        )
+        title = dialog.show()
+        if title is not None and session.project_id is not None and session.id is not None:
+            from domain.contribution import Contribution
+
+            self._db.insert_contribution(
+                Contribution(
+                    project_id=session.project_id,
+                    title=title,
+                    session_id=session.id,
+                )
+            )
+        if self._mini_view is not None and self._mini_view.winfo_exists():
+            self._mini_view.show_normal()
+        self._refresh_mini()
+
+    def _mini_skip(self, session) -> None:
+        if self._mini_view is not None and self._mini_view.winfo_exists():
+            self._mini_view.show_normal()
+        self._refresh_mini()
+
+    def _mini_break_done(self) -> None:
+        if self._auto_start_enabled():
+            active = self._sessions.active
+            if active is not None and active.project_id is not None:
+                try:
+                    self._sessions.start(active.project_id)
+                except Exception:
+                    pass
+        if self._mini_view is not None and self._mini_view.winfo_exists():
+            self._mini_view.show_normal()
+        self._refresh_mini()
 
     def show_dashboard(self) -> None:
         self.title(APP_NAME)
@@ -406,10 +455,21 @@ class ChromodoroApp(ctk.CTk):
     def _handle_completion(self) -> None:
         if self._timer.mode is TimerMode.WORK and self._sessions.has_active:
             finished = self._sessions.complete()
-            if isinstance(self._view, TimerView):
+            if self._mini_view is not None and self._mini_view.winfo_exists():
+                self._mini_view.show_completion(
+                    format_duration(finished.duration or 0),
+                    on_log=lambda s=finished: self._mini_log(s),
+                    on_skip=lambda s=finished: self._mini_skip(s),
+                )
+            elif isinstance(self._view, TimerView):
                 self._view.show_review(finished)
         else:
-            if isinstance(self._view, TimerView):
+            if self._mini_view is not None and self._mini_view.winfo_exists():
+                self._mini_view.show_break(
+                    "Ready?",
+                    on_start=self._mini_break_done,
+                )
+            elif isinstance(self._view, TimerView):
                 if self._auto_start_enabled():
                     self._view.auto_restart()
                 else:
@@ -519,7 +579,7 @@ class ChromodoroApp(ctk.CTk):
             close_to_tray = self._settings.load().close_to_tray
         except Exception:
             close_to_tray = True
-        if close_to_tray and self._tray.available and self._tray.start():
+        if close_to_tray and self._tray.available:
             self.withdraw()
             self._update_tray_tooltip()
             return

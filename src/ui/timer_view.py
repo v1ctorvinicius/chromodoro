@@ -259,7 +259,7 @@ class TimerView(ctk.CTkFrame):
         ).pack(side="left", padx=6)
         if self._on_toggle_mini is not None:
             ctk.CTkButton(
-                links, text="\u25A1 Widget", width=90, height=28, fg_color="transparent",
+                links, text="\u25A1 Mini Widget", width=90, height=28, fg_color="transparent",
                 text_color="gray60", border_width=0, hover_color=("gray92", "gray17"),
                 command=self._on_toggle_mini,
             ).pack(side="left", padx=6)

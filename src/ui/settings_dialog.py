@@ -29,6 +29,7 @@ class SettingsDialog(ctk.CTkToplevel):
         self._sound_var = ctk.BooleanVar(master=self, value=settings.sound_alerts)
         self._auto_var = ctk.BooleanVar(master=self, value=settings.auto_start_after_break)
         self._tray_var = ctk.BooleanVar(master=self, value=settings.close_to_tray)
+        self._start_tray_var = ctk.BooleanVar(master=self, value=settings.start_in_tray)
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
@@ -74,6 +75,13 @@ class SettingsDialog(ctk.CTkToplevel):
             checkbox_width=20,
             checkbox_height=20,
         ).grid(row=len(FIELDS) * 2 + 2, column=0, sticky="w", pady=(10, 0))
+        ctk.CTkCheckBox(
+            form,
+            text="Start minimized to tray on launch",
+            variable=self._start_tray_var,
+            checkbox_width=20,
+            checkbox_height=20,
+        ).grid(row=len(FIELDS) * 2 + 3, column=0, sticky="w", pady=(10, 0))
         ctk.CTkButton(
             form,
             text="\u266A  Test sound",
@@ -83,7 +91,7 @@ class SettingsDialog(ctk.CTkToplevel):
             border_width=1,
             border_color=("gray60", "gray35"),
             command=self._test_sound,
-        ).grid(row=len(FIELDS) * 2 + 3, column=0, sticky="w", pady=(8, 0))
+        ).grid(row=len(FIELDS) * 2 + 4, column=0, sticky="w", pady=(8, 0))
 
         self._error_label = ctk.CTkLabel(self, text="", text_color="#ef5350", anchor="w", height=18)
         self._error_label.grid(row=3, column=0, padx=28, sticky="ew")
@@ -119,6 +127,7 @@ class SettingsDialog(ctk.CTkToplevel):
             sound_alerts=bool(self._sound_var.get()),
             auto_start_after_break=bool(self._auto_var.get()),
             close_to_tray=bool(self._tray_var.get()),
+            start_in_tray=bool(self._start_tray_var.get()),
         )
 
     def _test_sound(self) -> None:
