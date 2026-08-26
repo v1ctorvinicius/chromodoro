@@ -25,6 +25,7 @@ class ProjectStats:
     session_count: int
     contribution_count: int
     last_activity: datetime | None
+    notes_count: int = 0
 
 
 class ProjectService:
@@ -103,7 +104,12 @@ class ProjectService:
             session_count=int(row["session_count"]),
             contribution_count=self._db.count_contributions(project_id),
             last_activity=_parse(row["last_activity"]),
+            notes_count=self._db.count_notes(project_id),
         )
+
+    def today_seconds(self, project_id: int) -> float:
+        today = self._now_fn().replace(hour=0, minute=0, second=0, microsecond=0)
+        return self._db.project_seconds_since(project_id, today)
 
     def sessions(self, project_id: int) -> list[Session]:
         return self._db.list_sessions(project_id)
@@ -111,8 +117,33 @@ class ProjectService:
     def contributions(self, project_id: int, limit: int | None = None) -> list[Contribution]:
         return self._db.list_contributions(project_id, limit)
 
+    def notes(self, project_id: int) -> list[Contribution]:
+        return self._db.list_notes(project_id)
+
     def contributions_by_session(self, project_id: int) -> dict[int | None, list[Contribution]]:
         return self._db.contributions_by_session(project_id)
+
+    def update_contribution(self, contribution_id: int, title: str) -> None:
+        cleaned = title.strip()
+        if not cleaned:
+            raise ValueError("Contribution title must not be empty")
+        self._db.update_contribution(contribution_id, cleaned)
+
+    def delete_contribution(self, contribution_id: int) -> None:
+        self._db.delete_contribution(contribution_id)
+
+    def add_note(self, project_id: int, title: str) -> Contribution:
+        cleaned = title.strip()
+        if not cleaned:
+            raise ValueError("Note must not be empty")
+        note = Contribution(
+            project_id=project_id,
+            title=cleaned,
+            created_at=self._now_fn(),
+            session_id=None,
+        )
+        note.id = self._db.insert_contribution(note)
+        return note
 
     def global_totals(self) -> tuple[float, float]:
         today = self._now_fn().replace(hour=0, minute=0, second=0, microsecond=0)

@@ -13,7 +13,7 @@ def make_projects(database: Database, clock):
 
 
 def add_session(database: Database, project_id: int, started, duration: float, status: SessionStatus):
-    database.insert_session(
+    return database.insert_session(
         Session(project_id=project_id, started_at=started, duration=duration, status=status)
     )
 
@@ -58,15 +58,19 @@ def test_project_stats_counts_only_counted_sessions(clock, db):
     services = make_projects(db, clock)
     project = services.create_project("P")
     now = clock.now()
-    add_session(db, project.id, now.replace(hour=9), 1500.0, SessionStatus.COMPLETED)
+    counted = add_session(db, project.id, now.replace(hour=9), 1500.0, SessionStatus.COMPLETED)
     add_session(db, project.id, now.replace(hour=11), 780.0, SessionStatus.INTERRUPTED)
     add_session(db, project.id, now.replace(hour=13), 999.0, SessionStatus.CANCELLED)
-    db.insert_contribution(Contribution(project_id=project.id, title="C", created_at=now))
+    db.insert_contribution(
+        Contribution(project_id=project.id, title="C", created_at=now, session_id=counted)
+    )
+    db.insert_contribution(Contribution(project_id=project.id, title="N", created_at=now))
 
     stats = services.project_stats(project.id)
     assert stats.total_seconds == pytest.approx(2280.0)
     assert stats.session_count == 2
     assert stats.contribution_count == 1
+    assert stats.notes_count == 1
     assert stats.last_activity is not None
 
 
@@ -194,3 +198,59 @@ def test_summary_today_ignores_running_sessions(clock, db):
 
     summary = service.list_summaries()[0]
     assert summary.today_seconds == 0.0
+
+
+def add_contribution(database: Database, project_id: int, title: str, created):
+    contribution = Contribution(project_id=project_id, title=title, created_at=created)
+    contribution.id = database.insert_contribution(contribution)
+    return contribution
+
+
+def test_update_contribution_validates_and_persists(clock, db):
+    projects = make_projects(db, clock)
+    project = projects.create_project("Alpha")
+    contribution = add_contribution(db, project.id, "First draft", clock.now())
+
+    with pytest.raises(ValueError):
+        projects.update_contribution(contribution.id, "   ")
+
+    projects.update_contribution(contribution.id, "Polished draft")
+
+    stored = db.list_contributions(project.id)[0]
+    assert stored.title == "Polished draft"
+    assert stored.id == contribution.id
+
+
+def test_delete_contribution_removes_only_target(clock, db):
+    projects = make_projects(db, clock)
+    project = projects.create_project("Alpha")
+    keep = add_contribution(db, project.id, "Keep me", clock.now())
+    drop = add_contribution(db, project.id, "Drop me", clock.now())
+
+    projects.delete_contribution(drop.id)
+
+    remaining = db.list_contributions(project.id)
+    assert [c.title for c in remaining] == ["Keep me"]
+    assert remaining[0].id == keep.id
+
+
+def test_add_note_persists_without_session(clock, db):
+    projects = make_projects(db, clock)
+    project = projects.create_project("Alpha")
+
+    note = projects.add_note(project.id, "  Idea captured mid-day  ")
+
+    assert note.id is not None
+    stored = db.list_contributions(project.id)[0]
+    assert stored.title == "Idea captured mid-day"
+    assert stored.session_id is None
+
+    grouped = projects.contributions_by_session(project.id)
+    assert "Idea captured mid-day" in [c.title for c in grouped[None]]
+
+
+def test_add_note_rejects_empty(clock, db):
+    projects = make_projects(db, clock)
+    project = projects.create_project("Alpha")
+    with pytest.raises(ValueError):
+        projects.add_note(project.id, "   ")

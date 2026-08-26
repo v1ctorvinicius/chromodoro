@@ -1,4 +1,5 @@
 APP_NAME = "Chromodoro"
+APP_VERSION = "1.7.0"
 
 WORK_MINUTES = 25
 BREAK_MINUTES = 5

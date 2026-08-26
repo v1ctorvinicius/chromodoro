@@ -17,6 +17,8 @@ class SettingsService:
                 long_break_minutes=self._int_setting("long_break_minutes", 15),
                 cycles_before_long_break=self._int_setting("cycles_before_long_break", 4),
                 sound_alerts=self._bool_setting("sound_alerts", True),
+                auto_start_after_break=self._bool_setting("auto_start_after_break", False),
+                close_to_tray=self._bool_setting("close_to_tray", True),
             )
         return self._cache
 
@@ -27,6 +29,8 @@ class SettingsService:
             long_break_minutes=settings.long_break_minutes,
             cycles_before_long_break=settings.cycles_before_long_break,
             sound_alerts=settings.sound_alerts,
+            auto_start_after_break=settings.auto_start_after_break,
+            close_to_tray=settings.close_to_tray,
         )
         for key, value in (
             ("work_minutes", validated.work_minutes),
@@ -34,6 +38,8 @@ class SettingsService:
             ("long_break_minutes", validated.long_break_minutes),
             ("cycles_before_long_break", validated.cycles_before_long_break),
             ("sound_alerts", int(validated.sound_alerts)),
+            ("auto_start_after_break", int(validated.auto_start_after_break)),
+            ("close_to_tray", int(validated.close_to_tray)),
         ):
             self._db.set_setting(key, str(value))
         self._cache = None

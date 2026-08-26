@@ -85,7 +85,8 @@ def test_contribution_insert_and_listing_with_limit(tmp_path):
     limited = database.list_contributions(project.id, limit=2)
     assert len(all_items) == 5
     assert [c.title for c in limited] == ["Thing 4", "Thing 3"]
-    assert database.count_contributions(project.id) == 5
+    assert database.count_contributions(project.id) == 0
+    assert database.count_notes(project.id) == 5
     database.close()
 
 
@@ -95,13 +96,16 @@ def test_summary_rows_expose_counts(tmp_path):
     database = Database(tmp_path / "a.db")
     project = database.insert_project(Project(name="P"))
     now = datetime(2026, 8, 20, 9, 0, 0)
-    database.insert_session(
+    session_id = database.insert_session(
         Session(project_id=project.id, started_at=now, duration=600.0, status=SessionStatus.COMPLETED)
     )
     database.insert_session(
         Session(project_id=project.id, started_at=now, duration=500.0, status=SessionStatus.CANCELLED)
     )
-    database.insert_contribution(Contribution(project_id=project.id, title="C", created_at=now))
+    database.insert_contribution(
+        Contribution(project_id=project.id, title="C", created_at=now, session_id=session_id)
+    )
+    database.insert_contribution(Contribution(project_id=project.id, title="N", created_at=now))
 
     rows = database.project_summary_rows("active", datetime(2026, 8, 20, 0, 0, 0))
     assert len(rows) == 1
@@ -137,4 +141,109 @@ def test_work_seconds_since_ignores_cancelled(tmp_path):
 
     total = database.work_seconds_since(boundary)
     assert total == pytest.approx(300.0)
+    database.close()
+
+
+def test_parked_summaries_latest_per_project(tmp_path):
+    from storage.database import Database
+
+    database = Database(tmp_path / "a.db")
+    alpha = database.insert_project(Project(name="Alpha"))
+    beta = database.insert_project(Project(name="Beta"))
+    now = datetime(2026, 8, 24, 9, 0, 0)
+
+    first = Session(project_id=alpha.id, started_at=now, duration=60.0)
+    first.id = database.insert_session(first)
+    second = Session(project_id=alpha.id, started_at=now, duration=180.0)
+    second.id = database.insert_session(second)
+    beta_parked = Session(
+        project_id=beta.id, started_at=now, duration=240.0, running_since=None
+    )
+    beta_parked.id = database.insert_session(beta_parked)
+
+    parked = database.parked_summaries()
+
+    assert parked[alpha.id] == pytest.approx(180.0)
+    assert parked[beta.id] == pytest.approx(240.0)
+    assert database.get_session(first.id).running_since is None
+    database.close()
+
+
+def test_project_seconds_since_filters_project_and_boundary(tmp_path):
+    from storage.database import Database
+
+    database = Database(tmp_path / "a.db")
+    alpha = database.insert_project(Project(name="Alpha"))
+    beta = database.insert_project(Project(name="Beta"))
+    boundary = datetime(2026, 8, 20, 0, 0, 0)
+
+    database.insert_session(
+        Session(
+            project_id=alpha.id,
+            started_at=datetime(2026, 8, 21, 9, 0, 0),
+            duration=300.0,
+            status=SessionStatus.COMPLETED,
+        )
+    )
+    database.insert_session(
+        Session(
+            project_id=alpha.id,
+            started_at=datetime(2026, 8, 19, 9, 0, 0),
+            duration=999.0,
+            status=SessionStatus.COMPLETED,
+        )
+    )
+    database.insert_session(
+        Session(
+            project_id=beta.id,
+            started_at=datetime(2026, 8, 21, 10, 0, 0),
+            duration=700.0,
+            status=SessionStatus.COMPLETED,
+        )
+    )
+
+    assert database.project_seconds_since(alpha.id, boundary) == pytest.approx(300.0)
+    assert database.project_seconds_since(beta.id, boundary) == pytest.approx(700.0)
+    database.close()
+
+
+def test_update_and_delete_contribution(tmp_path):
+    from storage.database import Database
+
+    database = Database(tmp_path / "a.db")
+    project = database.insert_project(Project(name="P"))
+    created = datetime(2026, 8, 24, 10, 0, 0)
+    contribution = Contribution(project_id=project.id, title="First draft", created_at=created)
+    contribution.id = database.insert_contribution(contribution)
+
+    database.update_contribution(contribution.id, "Polished draft")
+    stored = database.list_contributions(project.id)[0]
+    assert stored.title == "Polished draft"
+
+    database.delete_contribution(contribution.id)
+    assert database.list_contributions(project.id) == []
+    database.close()
+
+
+def test_notes_are_separated_from_contributions(tmp_path):
+    from storage.database import Database
+
+    database = Database(tmp_path / "a.db")
+    project = database.insert_project(Project(name="P"))
+    started = datetime(2026, 8, 24, 9, 0, 0)
+    session_id = database.insert_session(
+        Session(project_id=project.id, started_at=started)
+    )
+    real = Contribution(
+        project_id=project.id, title="From session", created_at=started, session_id=session_id
+    )
+    database.insert_contribution(real)
+    note = Contribution(project_id=project.id, title="Standalone note", created_at=started)
+    database.insert_contribution(note)
+
+    assert [n.title for n in database.list_notes(project.id)] == ["Standalone note"]
+    assert database.count_notes(project.id) == 1
+    assert database.count_contributions(project.id) == 1
+    grouped = database.contributions_by_session(project.id)
+    assert [c.title for c in grouped[session_id]] == ["From session"]
     database.close()

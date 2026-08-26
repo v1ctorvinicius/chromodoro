@@ -1,5 +1,11 @@
 import customtkinter as ctk
 
+try:
+    import winsound
+except ImportError:
+    winsound = None  # type: ignore[assignment]
+
+from config import ALERT_OPENING_TONES
 from domain.settings import MAX_CYCLES, MAX_MINUTES, MIN_CYCLES, MIN_MINUTES, AppSettings
 from ui.dialogs import make_modal
 
@@ -15,12 +21,14 @@ class SettingsDialog(ctk.CTkToplevel):
     def __init__(self, parent, settings: AppSettings):
         super().__init__(parent)
         self.title("Timer settings")
-        self.geometry("440x540")
-        self.minsize(440, 540)
+        self.geometry("440x640")
+        self.minsize(440, 640)
         self.resizable(True, True)
         self.result: AppSettings | None = None
         self._entries: dict[str, ctk.CTkEntry] = {}
         self._sound_var = ctk.BooleanVar(master=self, value=settings.sound_alerts)
+        self._auto_var = ctk.BooleanVar(master=self, value=settings.auto_start_after_break)
+        self._tray_var = ctk.BooleanVar(master=self, value=settings.close_to_tray)
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
@@ -51,7 +59,31 @@ class SettingsDialog(ctk.CTkToplevel):
             variable=self._sound_var,
             checkbox_width=20,
             checkbox_height=20,
-        ).grid(row=len(FIELDS) * 2, column=0, anchor="w", pady=(14, 0))
+        ).grid(row=len(FIELDS) * 2, column=0, sticky="w", pady=(14, 0))
+        ctk.CTkCheckBox(
+            form,
+            text="Auto-start focus when a break ends",
+            variable=self._auto_var,
+            checkbox_width=20,
+            checkbox_height=20,
+        ).grid(row=len(FIELDS) * 2 + 1, column=0, sticky="w", pady=(10, 0))
+        ctk.CTkCheckBox(
+            form,
+            text="Close button minimizes to tray",
+            variable=self._tray_var,
+            checkbox_width=20,
+            checkbox_height=20,
+        ).grid(row=len(FIELDS) * 2 + 2, column=0, sticky="w", pady=(10, 0))
+        ctk.CTkButton(
+            form,
+            text="\u266A  Test sound",
+            width=110,
+            height=28,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray60", "gray35"),
+            command=self._test_sound,
+        ).grid(row=len(FIELDS) * 2 + 3, column=0, sticky="w", pady=(8, 0))
 
         self._error_label = ctk.CTkLabel(self, text="", text_color="#ef5350", anchor="w", height=18)
         self._error_label.grid(row=3, column=0, padx=28, sticky="ew")
@@ -82,8 +114,28 @@ class SettingsDialog(ctk.CTkToplevel):
                 self._error_label.configure(text=f"{label_text}: must be between {low} and {high}.")
                 return
             values[key] = parsed
-        self.result = AppSettings(**values, sound_alerts=bool(self._sound_var.get()))
-        self.destroy()
+        self.result = AppSettings(
+            **values,
+            sound_alerts=bool(self._sound_var.get()),
+            auto_start_after_break=bool(self._auto_var.get()),
+            close_to_tray=bool(self._tray_var.get()),
+        )
+
+    def _test_sound(self) -> None:
+        def play(index: int = 0) -> None:
+            if index >= len(ALERT_OPENING_TONES):
+                return
+            frequency, duration = ALERT_OPENING_TONES[index]
+            try:
+                if winsound is not None:
+                    winsound.Beep(frequency, duration)
+                else:
+                    self.bell()
+            except Exception:
+                pass
+            self.after(60, lambda n=index + 1: play(n))
+
+        play()
 
     def show(self) -> AppSettings | None:
         self.wait_window()

@@ -1,6 +1,7 @@
 import time
 import traceback
-from tkinter import TclError
+from pathlib import Path
+from tkinter import TclError, messagebox
 
 import customtkinter as ctk
 
@@ -18,14 +19,16 @@ from config import (
     FLUSH_INTERVAL_SECONDS,
     TICK_MS,
 )
+from domain.project import ARCHIVED
 from domain.session import SessionStatus
 from services.project_service import ProjectService
 from services.session_service import SessionService
 from services.settings_service import SettingsService
 from services.timer_service import TimerMode, TimerService
-from storage.database import Database
+from storage.database import Database, default_db_path
 from ui.dashboard import Dashboard
 from ui.dialogs import ProjectFormDialog, RecoveryDialog, confirm
+from ui.focus_bar import FocusBar
 from ui.project_view import ProjectView
 from ui.settings_dialog import SettingsDialog
 from ui.timer_view import TimerView
@@ -38,6 +41,9 @@ from utils.alerts import (
     system_caption_color,
 )
 from utils.formatting import format_clock, format_duration, format_time
+from utils.keys import is_typing_widget
+from utils.singleinstance import acquire_instance_lock
+from utils.tray import TrayController
 
 
 class ChromodoroApp(ctk.CTk):
@@ -64,8 +70,13 @@ class ChromodoroApp(ctk.CTk):
         self._alerting = False
         self._hwnd = get_hwnd(self)
         self._caption_restore = system_caption_color(is_dark_theme=True)
+        self._tray = TrayController(APP_NAME)
+        self._quit_from_tray = False
+        self._mini_view = None
 
         self.bind("<FocusIn>", self._on_focus_in)
+        self.bind("<space>", self._on_space_key)
+        self.bind("<Escape>", self._on_escape_key)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._recover_pending_sessions()
         self._schedule_tick()
@@ -85,8 +96,117 @@ class ChromodoroApp(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)
         self._view = frame
 
+    def _build_focus_bar(self, master):
+        active = self._sessions.active
+        if active is None or active.project_id is None:
+            return None
+        name = self._resolve_project_name(active.project_id)
+        return FocusBar(
+            master,
+            project_name=name,
+            clock_fn=self._timer.remaining,
+            running_fn=lambda: self._timer.is_running,
+            on_toggle=self._toggle_active_pause,
+            on_open=self._open_active_focus,
+        )
+
+    def _toggle_active_pause(self) -> None:
+        if self._sessions.active is None:
+            return
+        if self._timer.state.value == "paused":
+            self._sessions.resume()
+        else:
+            self._sessions.pause()
+
+    def _open_active_focus(self) -> None:
+        active = self._sessions.active
+        if active is None:
+            self.show_dashboard()
+            return
+        self.start_focus(active.project_id)
+
+    def _toggle_mini(self) -> None:
+        if self._mini_view is not None:
+            self._close_mini()
+            return
+        if self._sessions.active is None:
+            return
+        self._open_mini()
+
+    def _open_mini(self) -> None:
+        if self._mini_view is not None:
+            return
+        from ui.mini_view import MiniView
+
+        self._mini_view = MiniView(
+            self,
+            on_toggle=self._toggle_active_pause,
+            on_close=self._close_mini,
+            on_switch=self._switch_mini_project,
+            on_refresh=self._refresh_mini,
+        )
+        self._refresh_mini()
+        self.withdraw()
+
+    def _close_mini(self) -> None:
+        if self._mini_view is None:
+            return
+        self._mini_view.destroy()
+        self._mini_view = None
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    def _refresh_mini(self) -> None:
+        if self._mini_view is None or not self._mini_view.winfo_exists():
+            return
+        name = ""
+        active = self._sessions.active
+        if active is not None and active.project_id is not None:
+            name = self._resolve_project_name(active.project_id)
+        self._mini_view.update_info(
+            format_clock(self._timer.remaining()),
+            self._timer.is_running,
+            name,
+        )
+
+    def _switch_mini_project(self) -> None:
+        from ui.dialogs import SwitchProjectDialog
+
+        active = self._sessions.active
+        current_pid = active.project_id if active is not None else None
+        parked = self._sessions.parked_map()
+        summaries = self._projects.list_summaries()
+
+        targets: list[tuple[int, str]] = []
+        for s in summaries:
+            pid = s.project.id
+            if pid is None or pid == current_pid:
+                continue
+            label = s.project.name
+            seconds = parked.get(pid)
+            if seconds:
+                label += f"  ({format_duration(seconds)} parked)"
+            targets.append((pid, label))
+
+        if not targets:
+            return
+
+        dialog = SwitchProjectDialog(self._mini_view, targets)
+        chosen = dialog.show()
+        if chosen is not None:
+            self._sessions.switch_to(chosen)
+            self._refresh_mini()
+
     def show_dashboard(self) -> None:
         self.title(APP_NAME)
+        active = self._sessions.active
+        active_pid = active.project_id if active is not None else None
+        parked = {
+            pid: seconds
+            for pid, seconds in self._sessions.parked_map().items()
+            if pid != active_pid
+        }
         self._swap(
             Dashboard(
                 self,
@@ -95,8 +215,19 @@ class ChromodoroApp(ctk.CTk):
                 on_new_project=self._new_project_dialog,
                 on_quick_work=self.start_focus,
                 on_open_settings=self._open_settings_dialog,
+                on_changed=self._on_project_data_changed,
+                active_project_id=active_pid,
+                active_state=self._timer.state.value if active is not None else None,
+                parked_map=parked,
+                focus_bar_fn=self._build_focus_bar,
+                on_quit=self._force_quit,
+                on_widget=self._toggle_mini,
             )
         )
+
+    def _on_project_data_changed(self) -> None:
+        self._project_name_cache.clear()
+        self.show_dashboard()
 
     def open_project(self, project_id: int) -> None:
         try:
@@ -106,6 +237,8 @@ class ChromodoroApp(ctk.CTk):
             return
         assert project.id is not None
         self._project_name_cache[project.id] = project.name
+        active = self._sessions.active
+        switch_mode = active is not None and active.project_id != project.id
         self._swap(
             ProjectView(
                 self,
@@ -115,16 +248,14 @@ class ChromodoroApp(ctk.CTk):
                 on_work=lambda: self.start_focus(project.id),
                 on_changed=lambda: self.open_project(project.id),
                 on_archived=self.show_dashboard,
+                switch_mode=switch_mode,
+                focus_bar_fn=self._build_focus_bar,
             )
         )
 
     def start_focus(self, project_id: int) -> None:
-        if self._sessions.has_active and (
-            self._sessions.active is None or self._sessions.active.project_id != project_id
-        ):
-            self._enter_timer(project_id, start_session=False)
-            return
-        self._enter_timer(project_id, start_session=not self._sessions.has_active)
+        self._sessions.switch_to(project_id)
+        self._enter_timer(project_id, start_session=False)
 
     def _new_project_dialog(self) -> None:
         dialog = ProjectFormDialog(self, title="New project")
@@ -159,8 +290,47 @@ class ChromodoroApp(ctk.CTk):
                 start_session=start_session,
                 on_exit_project=lambda: self.open_project(project.id),
                 on_all_projects=self.show_dashboard,
+                on_switch=lambda: self._quick_switch(project.id),
+                on_switch_project=self._quick_switch,
+                switch_targets_fn=self._switch_targets,
+                project_namer=self._resolve_project_name,
+                today_total_fn=lambda pid: self._projects.today_seconds(pid),
+                on_toggle_mini=self._toggle_mini,
             )
         )
+
+    def _switch_targets(self, exclude_pid: int) -> list[tuple[int, str]]:
+        parked = self._sessions.parked_map()
+        targets: list[tuple[int, str]] = []
+        for summary in self._projects.list_summaries():
+            project = summary.project
+            if project.id is None or project.id == exclude_pid or project.status == ARCHIVED:
+                continue
+            seconds = parked.get(project.id)
+            label = f"{project.name} · {format_duration(seconds)} parked" if seconds else project.name
+            targets.append((project.id, label))
+        return targets
+
+    def _keyboard_free(self) -> bool:
+        try:
+            focused = self.focus_get()
+        except Exception:
+            return False
+        return not is_typing_widget(focused)
+
+    def _on_space_key(self, _event=None) -> str:
+        if isinstance(self._view, TimerView) and self._keyboard_free():
+            self._view.handle_space()
+        return "break"
+
+    def _on_escape_key(self, _event=None) -> str:
+        if isinstance(self._view, TimerView) and self._keyboard_free():
+            self._view.handle_escape()
+        return "break"
+
+    def _quick_switch(self, project_id: int) -> None:
+        self._sessions.switch_to(project_id)
+        self._enter_timer(project_id, start_session=False)
 
     def _recover_pending_sessions(self) -> None:
         pending = self._sessions.recover_pending()
@@ -203,6 +373,17 @@ class ChromodoroApp(ctk.CTk):
             self.show_dashboard()
 
     def _tick(self) -> None:
+        if self._tray.open_requested.is_set():
+            self._tray.open_requested.clear()
+            self._restore_from_tray()
+        if self._tray.quit_requested.is_set():
+            self._tray.quit_requested.clear()
+            self._quit_from_tray = True
+            self._on_close()
+            return
+        if self._tray.mini_requested.is_set():
+            self._tray.mini_requested.clear()
+            self._toggle_mini()
         completed = self._timer.poll()
         if completed:
             self._notify()
@@ -215,6 +396,8 @@ class ChromodoroApp(ctk.CTk):
             self._view.on_tick()
 
         self._update_title()
+        self._update_tray_tooltip()
+        self._refresh_mini()
         self._schedule_tick()
 
     def _schedule_tick(self) -> None:
@@ -227,7 +410,16 @@ class ChromodoroApp(ctk.CTk):
                 self._view.show_review(finished)
         else:
             if isinstance(self._view, TimerView):
-                self._view.break_finished()
+                if self._auto_start_enabled():
+                    self._view.auto_restart()
+                else:
+                    self._view.break_finished()
+
+    def _auto_start_enabled(self) -> bool:
+        try:
+            return self._settings.load().auto_start_after_break
+        except Exception:
+            return False
 
     def _update_title(self) -> None:
         active = self._sessions.active
@@ -317,10 +509,20 @@ class ChromodoroApp(ctk.CTk):
         self._stop_alerts()
 
     def _on_close(self) -> None:
-        if self._tick_job is not None:
-            self.after_cancel(self._tick_job)
-            self._tick_job = None
-        self._stop_alerts()
+        if self._mini_view is not None:
+            self._close_mini()
+            return
+        if self._quit_from_tray:
+            self._real_close()
+            return
+        try:
+            close_to_tray = self._settings.load().close_to_tray
+        except Exception:
+            close_to_tray = True
+        if close_to_tray and self._tray.available and self._tray.start():
+            self.withdraw()
+            self._update_tray_tooltip()
+            return
         if self._sessions.has_active:
             proceed = confirm(
                 self,
@@ -331,11 +533,69 @@ class ChromodoroApp(ctk.CTk):
             )
             if not proceed:
                 return
+        self._real_close()
+
+    def _real_close(self) -> None:
+        self._tray.stop()
+        if self._tick_job is not None:
+            self.after_cancel(self._tick_job)
+            self._tick_job = None
+        self._stop_alerts()
+        if self._sessions.has_active:
             self._sessions.tick_flush()
+
+    def _force_quit(self) -> None:
+        if self._mini_view is not None:
+            self._close_mini()
+        if self._sessions.has_active:
+            proceed = confirm(
+                self,
+                "Quit Chromodoro",
+                "A focus session is running.\n\n"
+                "If you quit now the session will be kept safe and offered "
+                "for recovery next time you open Chromodoro.\n\nQuit anyway?",
+            )
+            if not proceed:
+                return
+        self._real_close()
         self._db.close()
         self.destroy()
 
+    def _restore_from_tray(self) -> None:
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+        self._stop_alerts()
 
-def main(db_path=None) -> None:
+    def _update_tray_tooltip(self) -> None:
+        active = self._sessions.active
+        if active is not None and self._timer.is_running:
+            name = self._resolve_project_name(active.project_id)
+            self._tray.update_tooltip(f"{format_clock(self._timer.remaining())} · {name}")
+        else:
+            self._tray.update_tooltip(APP_NAME)
+
+
+def main(db_path=None, *, on_already_running=None) -> None:
+    path = Path(db_path) if db_path is not None else default_db_path()
+    handler = on_already_running or _show_already_running
+    if not acquire_instance_lock(path):
+        handler()
+        return
     app = ChromodoroApp(db_path=db_path)
     app.mainloop()
+
+
+def _show_already_running() -> None:
+    try:
+        probe = ctk.CTk()
+        probe.withdraw()
+        messagebox.showinfo(
+            APP_NAME,
+            "Chromodoro is already running for this data.\n\n"
+            "Use the existing window and Quick Switch between projects.",
+            parent=probe,
+        )
+        probe.destroy()
+    except Exception:
+        pass

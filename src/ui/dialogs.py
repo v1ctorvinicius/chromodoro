@@ -92,6 +92,63 @@ class ProjectFormDialog(ctk.CTkToplevel):
         return self.result
 
 
+class TextPromptDialog(ctk.CTkToplevel):
+    def __init__(
+        self,
+        parent,
+        title: str,
+        initial: str = "",
+        label: str = "Text",
+        ok_text: str = "Save",
+        empty_message: str = "Text is required.",
+    ):
+        super().__init__(parent)
+        self.title(title)
+        self.geometry("460x190")
+        self.resizable(False, False)
+        self.result: str | None = None
+        self._empty_message = empty_message
+
+        self.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(self, text=label, anchor="w").grid(
+            row=0, column=0, padx=24, pady=(20, 4), sticky="ew"
+        )
+        self._entry = ctk.CTkEntry(self, height=34, font=ctk.CTkFont(size=14))
+        self._entry.insert(0, initial)
+        self._entry.grid(row=1, column=0, padx=24, pady=(0, 6), sticky="ew")
+
+        self._error_label = ctk.CTkLabel(self, text="", text_color="#ef5350", anchor="w", height=18)
+        self._error_label.grid(row=2, column=0, padx=24, sticky="ew")
+
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.grid(row=3, column=0, padx=24, pady=(6, 18), sticky="ew")
+        buttons.grid_columnconfigure(0, weight=1)
+        ctk.CTkButton(
+            buttons, text="Cancel", width=100, fg_color="transparent", border_width=1,
+            command=self.destroy,
+        ).grid(row=0, column=1, padx=(8, 0))
+        ctk.CTkButton(buttons, text=ok_text, width=120, command=self._save).grid(row=0, column=2)
+
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.bind("<Return>", lambda _e: self._save())
+        self._entry.focus_set()
+        self._entry.icursor("end")
+        make_modal(self, parent)
+
+    def _save(self) -> None:
+        text = self._entry.get().strip()
+        if not text:
+            self._error_label.configure(text=self._empty_message)
+            return
+        self.result = text
+        self.destroy()
+
+    def show(self) -> str | None:
+        self.wait_window()
+        return self.result
+
+
 class InterruptDialog(ctk.CTkToplevel):
     def __init__(self, parent, elapsed_text: str):
         super().__init__(parent)
@@ -184,3 +241,42 @@ class RecoveryDialog(ctk.CTkToplevel):
     def show(self) -> str | None:
         self.wait_window()
         return self.choice or "resume"
+
+
+class SwitchProjectDialog(ctk.CTkToplevel):
+    def __init__(self, parent, targets: list[tuple[int, str]]):
+        super().__init__(parent)
+        self.title("Switch project")
+        self.result: int | None = None
+        self.geometry("320x260")
+        self.resizable(False, False)
+
+        ctk.CTkLabel(
+            self, text="Switch to:", font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(padx=20, pady=(16, 8), anchor="w")
+
+        scroll = ctk.CTkScrollableFrame(self, fg_color="transparent", height=180)
+        scroll.pack(fill="x", padx=20)
+
+        for pid, label in targets:
+            ctk.CTkButton(
+                scroll,
+                text=label,
+                anchor="w",
+                height=32,
+                fg_color="transparent",
+                border_width=1,
+                border_color=("gray70", "gray30"),
+                command=lambda p=pid: self._pick(p),
+            ).pack(fill="x", pady=2)
+
+        self.bind("<Escape>", lambda _: self.destroy())
+        make_modal(self, parent)
+
+    def _pick(self, project_id: int) -> None:
+        self.result = project_id
+        self.destroy()
+
+    def show(self) -> int | None:
+        self.wait_window()
+        return self.result

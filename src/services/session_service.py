@@ -88,6 +88,47 @@ class SessionService:
         self._require_active()
         return self._finalize(SessionStatus.CANCELLED)
 
+    def park(self) -> Session:
+        self._require_active()
+        session = self.active
+        assert session is not None
+        assert session.id is not None
+        duration = self._timer.elapsed()
+        pauses = self._timer.pause_seconds()
+        self._db.save_progress(session.id, duration, pauses, None)
+        session.duration = duration
+        session.pause_duration = pauses
+        session.running_since = None
+        self.active = None
+        self._timer.cancel()
+        return session
+
+    def resume_parked(self, project_id: int) -> Session | None:
+        parked = self._db.latest_parked_session(project_id)
+        if parked is None:
+            return None
+        self.adopt(parked)
+        self._timer.resume()
+        self._flush()
+        return parked
+
+    def peek_parked(self, project_id: int) -> Session | None:
+        return self._db.latest_parked_session(project_id)
+
+    def parked_map(self) -> dict[int, float]:
+        return self._db.parked_summaries()
+
+    def switch_to(self, project_id: int) -> Session | None:
+        active = self.active
+        if active is not None and active.project_id == project_id:
+            return None
+        if active is not None:
+            self.park()
+        resumed = self.resume_parked(project_id)
+        if resumed is not None:
+            return resumed
+        return self.start(project_id)
+
     def tick_flush(self) -> None:
         if self.active is None:
             return

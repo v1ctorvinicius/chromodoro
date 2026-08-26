@@ -279,6 +279,34 @@ class Database:
         rows = self._conn.execute("SELECT * FROM sessions WHERE status = 'running' ORDER BY id").fetchall()
         return [_row_to_session(r) for r in rows]
 
+    def latest_parked_session(self, project_id: int) -> Session | None:
+        row = self._conn.execute(
+            "SELECT * FROM sessions WHERE project_id = ? AND status = 'running'"
+            " AND ended_at IS NULL AND running_since IS NULL"
+            " ORDER BY started_at DESC, id DESC LIMIT 1",
+            (project_id,),
+        ).fetchone()
+        return _row_to_session(row) if row else None
+
+    def parked_summaries(self) -> dict[int, float]:
+        rows = self._conn.execute(
+            "SELECT project_id, duration FROM sessions WHERE status = 'running'"
+            " AND ended_at IS NULL AND running_since IS NULL"
+            " ORDER BY id"
+        ).fetchall()
+        parked: dict[int, float] = {}
+        for row in rows:
+            parked[int(row["project_id"])] = float(row["duration"])
+        return parked
+
+    def project_seconds_since(self, project_id: int, boundary: datetime) -> float:
+        row = self._conn.execute(
+            f"SELECT COALESCE(SUM(duration), 0) AS total FROM sessions"
+            f" WHERE project_id = ? AND status IN {_COUNTED} AND started_at >= ?",
+            (project_id, _to_str(boundary)),
+        ).fetchone()
+        return float(row["total"])
+
     def work_seconds_since(self, boundary: datetime) -> float:
         row = self._conn.execute(
             f"SELECT COALESCE(SUM(duration), 0) AS total FROM sessions"
@@ -313,11 +341,40 @@ class Database:
         rows = self._conn.execute(query, params).fetchall()
         return [_row_to_contribution(r) for r in rows]
 
+    def update_contribution(self, contribution_id: int, title: str, ctype: str | None = None) -> None:
+        self._conn.execute(
+            "UPDATE contributions SET title = ?, type = COALESCE(?, type) WHERE id = ?",
+            (title, ctype, contribution_id),
+        )
+        self._conn.commit()
+
+    def delete_contribution(self, contribution_id: int) -> None:
+        self._conn.execute("DELETE FROM contributions WHERE id = ?", (contribution_id,))
+        self._conn.commit()
+
     def count_contributions(self, project_id: int) -> int:
         row = self._conn.execute(
-            "SELECT COUNT(*) AS total FROM contributions WHERE project_id = ?", (project_id,)
+            "SELECT COUNT(*) AS total FROM contributions"
+            " WHERE project_id = ? AND session_id IS NOT NULL",
+            (project_id,),
         ).fetchone()
         return int(row["total"])
+
+    def count_notes(self, project_id: int) -> int:
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS total FROM contributions"
+            " WHERE project_id = ? AND session_id IS NULL",
+            (project_id,),
+        ).fetchone()
+        return int(row["total"])
+
+    def list_notes(self, project_id: int) -> list[Contribution]:
+        rows = self._conn.execute(
+            "SELECT * FROM contributions WHERE project_id = ? AND session_id IS NULL"
+            " ORDER BY created_at DESC, id DESC",
+            (project_id,),
+        ).fetchall()
+        return [_row_to_contribution(r) for r in rows]
 
     def contributions_by_session(self, project_id: int) -> dict[int | None, list[Contribution]]:
         grouped: dict[int | None, list[Contribution]] = {}
@@ -330,7 +387,8 @@ class Database:
             f"SELECT p.id, p.name, p.description, p.status, p.created_at, p.daily_goal_minutes,"
             f" COALESCE(agg.total_seconds, 0) AS total_seconds,"
             f" COALESCE(agg.session_count, 0) AS session_count,"
-            f" (SELECT COUNT(*) FROM contributions c WHERE c.project_id = p.id) AS contribution_count,"
+            f" (SELECT COUNT(*) FROM contributions c WHERE c.project_id = p.id"
+            f"   AND c.session_id IS NOT NULL) AS contribution_count,"
             f" COALESCE((SELECT SUM(s.duration) FROM sessions s"
             f"   WHERE s.project_id = p.id AND s.status IN {_COUNTED} AND s.started_at >= ?), 0)"
             f"   AS today_seconds,"

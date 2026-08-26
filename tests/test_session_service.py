@@ -230,3 +230,89 @@ def test_interrupted_session_does_not_count_toward_long_break(clock, db):
 
     assert service.completed_cycles == 0
     assert service.peek_break_seconds() != pytest.approx(service.config.long_break_minutes * 60)
+
+
+def test_switch_parks_current_and_starts_target(clock, db):
+    alpha = make_project(db, "Alpha")
+    beta = make_project(db, "Beta")
+    service = make_service(db, clock)
+    first = service.start(alpha.id)
+    clock.advance(300)
+
+    switched = service.switch_to(beta.id)
+    assert switched is not None
+
+    assert switched.project_id == beta.id
+    assert service.has_active
+    assert service.active is not None and service.active.project_id == beta.id
+    parked = db.get_session(first.id)
+    assert parked.status.value == "running"
+    assert parked.running_since is None
+    assert parked.duration == pytest.approx(300, abs=1)
+    assert service.timer.elapsed() == pytest.approx(0, abs=1)
+
+
+def test_switch_back_resumes_parked_session(clock, db):
+    alpha = make_project(db, "Alpha")
+    beta = make_project(db, "Beta")
+    service = make_service(db, clock)
+    original = service.start(alpha.id)
+    clock.advance(300)
+    service.switch_to(beta.id)
+    clock.advance(100)
+
+    back = service.switch_to(alpha.id)
+    assert back is not None
+
+    assert back.id == original.id
+    assert service.timer.state.value == "running"
+    assert service.timer.elapsed() == pytest.approx(300, abs=2)
+    beta_sessions = db.list_sessions(beta.id)
+    assert len(beta_sessions) == 1
+    assert beta_sessions[0].duration == pytest.approx(100, abs=1)
+    assert beta_sessions[0].status.value == "running"
+
+
+def test_switch_to_same_project_is_noop(clock, db):
+    project = make_project(db)
+    service = make_service(db, clock)
+    started = service.start(project.id)
+    clock.advance(60)
+
+    result = service.switch_to(project.id)
+
+    assert result is None
+    assert service.active is not None and service.active.id == started.id
+
+
+def test_switch_without_active_resumes_parked_instead_of_new_session(clock, db):
+    alpha = make_project(db, "Alpha")
+    service = make_service(db, clock)
+    parked_session = service.start(alpha.id)
+    clock.advance(200)
+    service.park()
+    assert not service.has_active
+
+    resumed = service.switch_to(alpha.id)
+    assert resumed is not None
+
+    assert resumed.id == parked_session.id
+    assert service.timer.state.value == "running"
+    assert len(db.list_sessions(alpha.id)) == 1
+
+
+def test_peek_parked_reports_session_without_disturbing_state(clock, db):
+    alpha = make_project(db, "Alpha")
+    beta = make_project(db, "Beta")
+    service = make_service(db, clock)
+    parked_session = service.start(alpha.id)
+    clock.advance(120)
+    service.park()
+
+    peeked = service.peek_parked(alpha.id)
+
+    assert peeked is not None
+    assert peeked.id == parked_session.id
+    assert peeked.duration == pytest.approx(120, abs=1)
+    assert service.peek_parked(beta.id) is None
+    assert not service.has_active

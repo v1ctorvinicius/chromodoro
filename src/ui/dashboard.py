@@ -3,7 +3,9 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
+from config import APP_VERSION
 from services.project_service import ProjectService
+from ui.dialogs import ProjectFormDialog, confirm
 from utils.formatting import format_day_label, format_duration
 
 
@@ -16,12 +18,30 @@ class Dashboard(ctk.CTkFrame):
         on_new_project,
         on_quick_work,
         on_open_settings=None,
+        on_changed=None,
+        active_project_id: int | None = None,
+        active_state: str | None = None,
+        parked_map: dict[int, float] | None = None,
+        focus_bar_fn=None,
+        on_quit=None,
+        on_widget=None,
     ):
         super().__init__(master, fg_color="transparent")
         self._projects = project_service
+        self._on_changed = on_changed
+        self._on_quit = on_quit
+        self._on_widget = on_widget
+        self._active_project_id = active_project_id
+        self._active_state = active_state
+        self._parked_map = parked_map or {}
 
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
+        next_row = 1
+        bar = focus_bar_fn(self) if focus_bar_fn is not None else None
+        if bar is not None:
+            bar.grid(row=1, column=0, sticky="ew", padx=32, pady=(0, 4))
+            next_row = 2
+        self.grid_rowconfigure(next_row, weight=1)
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=32, pady=(24, 12))
@@ -39,8 +59,15 @@ class Dashboard(ctk.CTkFrame):
         )
 
         body = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        body.grid(row=1, column=0, sticky="nsew", padx=32)
+        body.grid(row=next_row, column=0, sticky="nsew", padx=32)
         body.grid_columnconfigure(0, weight=1)
+
+        def _on_scroll(event):
+            delta = event.delta
+            body._parent_frame.yview_scroll(int(-delta / 4), "units")
+            return "break"
+
+        body.bind("<MouseWheel>", _on_scroll)
 
         summaries = project_service.list_summaries()
         if not summaries:
@@ -58,7 +85,7 @@ class Dashboard(ctk.CTkFrame):
                 self._build_card(body, summary, index, on_open_project, on_quick_work)
 
         footer = ctk.CTkFrame(self, fg_color="transparent")
-        footer.grid(row=2, column=0, sticky="ew", padx=32, pady=(8, 16))
+        footer.grid(row=next_row + 1, column=0, sticky="ew", padx=32, pady=(8, 16))
         footer.grid_columnconfigure(2, weight=1)
 
         exports = ctk.CTkFrame(footer, fg_color="transparent")
@@ -78,6 +105,19 @@ class Dashboard(ctk.CTkFrame):
             border_width=1, border_color=("gray70", "gray30"),
             text_color=("gray30", "gray65"), command=self._backup_database,
         ).pack(side="left", padx=6)
+        if self._on_widget is not None:
+            ctk.CTkButton(
+                exports, text="\u25A1 Widget", width=80, height=26, fg_color="transparent",
+                border_width=1, border_color=("gray70", "gray30"),
+                text_color=("gray30", "gray65"), command=self._on_widget,
+            ).pack(side="left", padx=(12, 6))
+        if self._on_quit is not None:
+            ctk.CTkButton(
+                exports, text="Quit", width=60, height=26, fg_color="transparent",
+                border_width=1, border_color=("gray70", "gray30"),
+                text_color=("#c62828", "#ef9a9a"), hover_color=("gray88", "gray22"),
+                command=self._on_quit,
+            ).pack(side="left", padx=6)
 
         today_seconds, week_seconds = project_service.global_totals()
         ctk.CTkLabel(
@@ -85,10 +125,44 @@ class Dashboard(ctk.CTkFrame):
             text=(
                 f"Today {format_duration(today_seconds)}   ·   "
                 f"This week {format_duration(week_seconds)}"
+                f"   ·   v{APP_VERSION}"
             ),
             text_color="gray55",
             font=ctk.CTkFont(size=13),
         ).grid(row=0, column=2, sticky="e")
+
+    def _refresh(self) -> None:
+        if self._on_changed is not None:
+            self._on_changed()
+
+    def _edit_project(self, summary) -> None:
+        project = summary.project
+        dialog = ProjectFormDialog(
+            self.winfo_toplevel(),
+            title="Edit project",
+            name=project.name,
+            description=project.description,
+            daily_goal_minutes=project.daily_goal_minutes,
+        )
+        result = dialog.show()
+        if not result:
+            return
+        name, description, goal = result
+        try:
+            self._projects.update_project(project, name, description, daily_goal_minutes=goal)
+        except ValueError:
+            return
+        self._refresh()
+
+    def _archive_project(self, summary) -> None:
+        message = (
+            f"Archive '{summary.project.name}'?\n\n"
+            "It will disappear from the dashboard but its history is preserved."
+        )
+        if not confirm(self.winfo_toplevel(), "Archive project", message):
+            return
+        self._projects.archive_project(summary.project)
+        self._refresh()
 
     def _build_card(self, parent, summary, index, on_open_project, on_quick_work) -> None:
         card = ctk.CTkFrame(parent, corner_radius=12, border_width=1, border_color=("gray78", "gray28"))
@@ -102,6 +176,23 @@ class Dashboard(ctk.CTkFrame):
             info, text=summary.project.name, font=ctk.CTkFont(size=18, weight="bold"), anchor="w"
         )
         name_label.pack(anchor="w")
+
+        assert summary.project.id is not None
+        if summary.project.id == self._active_project_id and self._active_state is not None:
+            badge_text = "\u25CF  Running" if self._active_state == "running" else "\u2758\u2758  Paused"
+            badge_color = "#66bb6a" if self._active_state == "running" else "#ffb74d"
+            ctk.CTkLabel(
+                info, text=badge_text, text_color=badge_color,
+                font=ctk.CTkFont(size=12, weight="bold"), anchor="w",
+            ).pack(anchor="w", pady=(2, 0))
+        elif summary.project.id in self._parked_map:
+            parked_seconds = self._parked_map[summary.project.id]
+            if parked_seconds > 0:
+                ctk.CTkLabel(
+                    info,
+                    text=f"\u23F8  {format_duration(parked_seconds)} parked",
+                    text_color="#ffb74d", font=ctk.CTkFont(size=12), anchor="w",
+                ).pack(anchor="w", pady=(2, 0))
 
         meta_parts = [format_duration(summary.total_seconds), f"{summary.session_count} sessions"]
         meta_text = "  ·  ".join(meta_parts)
@@ -141,8 +232,25 @@ class Dashboard(ctk.CTkFrame):
             widgets_to_click.append(goal_label)
             widgets_to_click.append(bar)
 
-        work_button = ctk.CTkButton(card, text="Work", width=110, height=34)
-        work_button.grid(row=0, column=1, padx=(0, 20), pady=16)
+        actions = ctk.CTkFrame(card, fg_color="transparent")
+        actions.grid(row=0, column=1, padx=(0, 20), pady=16)
+        work_label = "\u23F1  Focus"
+        if self._active_project_id is not None and summary.project.id != self._active_project_id:
+            work_label = "\u21C4  Switch"
+        work_button = ctk.CTkButton(actions, text=work_label, width=110, height=34)
+        work_button.grid(row=0, column=0)
+        ctk.CTkButton(
+            actions, text="\u270E", width=34, height=34, fg_color="transparent",
+            border_width=1, border_color=("gray65", "gray35"),
+            text_color=("gray40", "gray65"),
+            command=lambda s=summary: self._edit_project(s),
+        ).grid(row=0, column=1, padx=(8, 0))
+        ctk.CTkButton(
+            actions, text="\U0001F4E6", width=34, height=34, fg_color="transparent",
+            border_width=1, border_color=("gray65", "gray35"),
+            text_color="#ef9a9a", hover_color=("gray88", "gray22"),
+            command=lambda s=summary: self._archive_project(s),
+        ).grid(row=0, column=2, padx=(6, 0))
 
         for widget in widgets_to_click:
             widget.configure(cursor="hand2")
