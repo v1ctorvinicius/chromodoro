@@ -1,3 +1,4 @@
+import atexit
 import time
 import traceback
 from pathlib import Path
@@ -53,7 +54,6 @@ class ChromodoroApp(ctk.CTk):
         ctk.set_default_color_theme("green")
 
         self.title(APP_NAME)
-        self.geometry("1000x700")
         self.minsize(780, 540)
 
         self._db = Database(db_path)
@@ -61,6 +61,9 @@ class ChromodoroApp(ctk.CTk):
         self._settings = SettingsService(self._db)
         self._sessions = SessionService(self._db, self._timer, self._settings)
         self._projects = ProjectService(self._db)
+
+        saved_geom = self._settings.get_str("window_geometry")
+        self.geometry(saved_geom if saved_geom else "1000x700")
 
         self._view = None
         self._project_name_cache: dict[int, str] = {}
@@ -77,14 +80,23 @@ class ChromodoroApp(ctk.CTk):
         self.bind("<FocusIn>", self._on_focus_in)
         self.bind("<space>", self._on_space_key)
         self.bind("<Escape>", self._on_escape_key)
+        self.bind("<F2>", lambda _: self._open_settings_dialog())
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._recover_pending_sessions()
         self._schedule_tick()
         self._tray.start()
         self._update_tray_tooltip()
+        atexit.register(self._atexit_flush)
         try:
             if self._settings.load().start_in_tray:
                 self.withdraw()
+        except Exception:
+            pass
+
+    def _atexit_flush(self) -> None:
+        try:
+            if self._sessions.has_active:
+                self._sessions.tick_flush()
         except Exception:
             pass
 
@@ -145,12 +157,14 @@ class ChromodoroApp(ctk.CTk):
             return
         from ui.mini_view import MiniView
 
+        saved_pos = self._settings.get_str("mini_position")
         self._mini_view = MiniView(
             self,
             on_toggle=self._toggle_active_pause,
             on_close=self._close_mini,
             on_switch=self._switch_mini_project,
             on_refresh=self._refresh_mini,
+            saved_position=saved_pos,
         )
         self._refresh_mini()
         self.withdraw()
@@ -158,6 +172,13 @@ class ChromodoroApp(ctk.CTk):
     def _close_mini(self) -> None:
         if self._mini_view is None:
             return
+        try:
+            geo = self._mini_view.geometry()
+            parts = geo.split("+")
+            if len(parts) == 3:
+                self._settings.set_str("mini_position", f"{parts[1]}+{parts[2]}")
+        except Exception:
+            pass
         self._mini_view.destroy()
         self._mini_view = None
         self.deiconify()
@@ -603,6 +624,12 @@ class ChromodoroApp(ctk.CTk):
         self._stop_alerts()
         if self._sessions.has_active:
             self._sessions.tick_flush()
+        try:
+            self._settings.set_str("window_geometry", self.geometry())
+        except Exception:
+            pass
+        self._db.close()
+        self.destroy()
 
     def _force_quit(self) -> None:
         if self._mini_view is not None:
@@ -618,8 +645,6 @@ class ChromodoroApp(ctk.CTk):
             if not proceed:
                 return
         self._real_close()
-        self._db.close()
-        self.destroy()
 
     def _restore_from_tray(self) -> None:
         self.deiconify()
@@ -629,11 +654,13 @@ class ChromodoroApp(ctk.CTk):
 
     def _update_tray_tooltip(self) -> None:
         active = self._sessions.active
+        is_running = active is not None and self._timer.is_running
         if active is not None and self._timer.is_running:
             name = self._resolve_project_name(active.project_id)
             self._tray.update_tooltip(f"{format_clock(self._timer.remaining())} · {name}")
         else:
             self._tray.update_tooltip(APP_NAME)
+        self._tray.update_icon(is_running)
 
 
 def main(db_path=None, *, on_already_running=None) -> None:

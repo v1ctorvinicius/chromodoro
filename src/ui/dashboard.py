@@ -49,13 +49,20 @@ class Dashboard(ctk.CTkFrame):
         ctk.CTkLabel(header, text="Projects", font=ctk.CTkFont(size=28, weight="bold")).grid(
             row=0, column=0
         )
-        if on_open_settings is not None:
-            ctk.CTkButton(
-                header, text="\u2699 Settings", width=110, fg_color="transparent",
-                border_width=1, border_color=("gray60", "gray35"), command=on_open_settings,
-            ).grid(row=0, column=1, padx=(16, 0))
+
+        self._filter_var = ctk.StringVar(value="")
+        ctk.CTkLabel(header, text="Search:", text_color="gray60", font=ctk.CTkFont(size=13)).grid(
+            row=0, column=1, padx=(16, 4)
+        )
+        search_entry = ctk.CTkEntry(
+            header, placeholder_text="type a project name", width=200, height=30,
+            textvariable=self._filter_var,
+        )
+        search_entry.grid(row=0, column=2, padx=(0, 0))
+        self._filter_var.trace_add("write", lambda *_: self._build_cards())
+
         ctk.CTkButton(header, text="+ New project", width=140, command=on_new_project).grid(
-            row=0, column=2, padx=(16, 0)
+            row=0, column=3, padx=(16, 0)
         )
 
         body = ctk.CTkScrollableFrame(self, fg_color="transparent")
@@ -68,27 +75,37 @@ class Dashboard(ctk.CTkFrame):
             return "break"
 
         body.bind("<MouseWheel>", _on_scroll)
+        self._body = body
+        self._summaries_all = project_service.list_summaries()
+        self._on_open_project = on_open_project
+        self._on_quick_work = on_quick_work
+        self._build_cards()
 
-        summaries = project_service.list_summaries()
-        if not summaries:
-            empty = ctk.CTkFrame(body, fg_color=("gray90", "gray17"), corner_radius=12)
-            empty.grid(row=0, column=0, sticky="ew", pady=24)
+        daily = project_service.weekly_daily_totals()
+        day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        week_row = ctk.CTkFrame(self, fg_color=("gray92", "gray20"), corner_radius=10)
+        week_row.grid(row=next_row + 1, column=0, sticky="ew", padx=32, pady=(0, 6))
+        for i in range(7):
+            week_row.grid_columnconfigure(i, weight=1)
+            secs = daily[i]
+            val = f"{int(secs // 60)}m" if secs >= 60 else "0"
             ctk.CTkLabel(
-                empty,
-                text="No projects yet.\nCreate one and start accumulating focused work.",
-                text_color="gray60",
+                week_row,
+                text=f"{day_labels[i]}\n{val}",
+                font=ctk.CTkFont(size=11),
+                text_color="gray45" if secs < 60 else "gray85",
                 justify="center",
-                font=ctk.CTkFont(size=14),
-            ).pack(padx=40, pady=48)
-        else:
-            for index, summary in enumerate(summaries):
-                self._build_card(body, summary, index, on_open_project, on_quick_work)
+            ).grid(row=0, column=i, padx=2, pady=6)
 
         footer = ctk.CTkFrame(self, fg_color="transparent")
-        footer.grid(row=next_row + 1, column=0, sticky="ew", padx=32, pady=(8, 16))
-        footer.grid_columnconfigure(2, weight=1)
+        footer.grid(row=next_row + 2, column=0, sticky="ew", padx=32, pady=(8, 16))
+        footer.grid_columnconfigure(0, weight=1)
 
-        exports = ctk.CTkFrame(footer, fg_color="transparent")
+        btn_row = ctk.CTkFrame(footer, fg_color="transparent")
+        btn_row.grid(row=0, column=0, sticky="ew")
+        btn_row.grid_columnconfigure(1, weight=1)
+
+        exports = ctk.CTkFrame(btn_row, fg_color="transparent")
         exports.grid(row=0, column=0, sticky="w")
         ctk.CTkButton(
             exports, text="Export sessions", width=140, height=26, fg_color="transparent",
@@ -105,15 +122,28 @@ class Dashboard(ctk.CTkFrame):
             border_width=1, border_color=("gray70", "gray30"),
             text_color=("gray30", "gray65"), command=self._backup_database,
         ).pack(side="left", padx=6)
+
+        actions = ctk.CTkFrame(btn_row, fg_color="transparent")
+        actions.grid(row=0, column=2, sticky="e")
+        has_active = self._active_project_id is not None
         if self._on_widget is not None:
+            self._widget_btn = ctk.CTkButton(
+                actions, text="\u25A1 Mini Widget", width=100, height=26,
+                fg_color=("#4a6fa5", "#3a5a8a"),
+                text_color="white", command=self._on_widget,
+            )
+            if not has_active:
+                self._widget_btn.configure(state="disabled", fg_color="gray50")
+            self._widget_btn.pack(side="left", padx=(0, 6))
+        if on_open_settings is not None:
             ctk.CTkButton(
-                exports, text="\u25A1 Mini Widget", width=80, height=26, fg_color="transparent",
+                actions, text="\u2699 Settings", width=110, height=26, fg_color="transparent",
                 border_width=1, border_color=("gray70", "gray30"),
-                text_color=("gray30", "gray65"), command=self._on_widget,
-            ).pack(side="left", padx=(12, 6))
+                text_color=("gray30", "gray65"), command=on_open_settings,
+            ).pack(side="left", padx=6)
         if self._on_quit is not None:
             ctk.CTkButton(
-                exports, text="Quit", width=60, height=26, fg_color="transparent",
+                actions, text="Quit", width=60, height=26, fg_color="transparent",
                 border_width=1, border_color=("gray70", "gray30"),
                 text_color=("#c62828", "#ef9a9a"), hover_color=("gray88", "gray22"),
                 command=self._on_quit,
@@ -129,7 +159,30 @@ class Dashboard(ctk.CTkFrame):
             ),
             text_color="gray55",
             font=ctk.CTkFont(size=13),
-        ).grid(row=0, column=2, sticky="e")
+        ).grid(row=1, column=0, sticky="e", pady=(4, 0))
+
+    def _build_cards(self) -> None:
+        for w in self._body.winfo_children():
+            w.destroy()
+        filter_text = self._filter_var.get().strip().lower() if hasattr(self, "_filter_var") else ""
+        summaries = [
+            s for s in self._summaries_all
+            if filter_text in s.project.name.lower()
+        ]
+        if not summaries:
+            empty = ctk.CTkFrame(self._body, fg_color=("gray90", "gray17"), corner_radius=12)
+            empty.grid(row=0, column=0, sticky="ew", pady=24)
+            ctk.CTkLabel(
+                empty,
+                text="No projects yet.\nCreate one and start accumulating focused work."
+                if not self._summaries_all else "No matching projects.",
+                text_color="gray60",
+                justify="center",
+                font=ctk.CTkFont(size=14),
+            ).pack(padx=40, pady=48)
+        else:
+            for index, summary in enumerate(summaries):
+                self._build_card(self._body, summary, index, self._on_open_project, self._on_quick_work)
 
     def _refresh(self) -> None:
         if self._on_changed is not None:

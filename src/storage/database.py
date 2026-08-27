@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 """,
     3: "ALTER TABLE projects ADD COLUMN daily_goal_minutes REAL NOT NULL DEFAULT 0;",
+    4: "ALTER TABLE sessions ADD COLUMN target_seconds REAL NOT NULL DEFAULT 0;",
 }
 
 
@@ -126,6 +127,7 @@ def _row_to_session(row: sqlite3.Row) -> Session:
         pause_duration=row["pause_duration"],
         status=SessionStatus(row["status"]),
         running_since=_to_dt(row["running_since"]),
+        target_seconds=row["target_seconds"],
     )
 
 
@@ -219,8 +221,8 @@ class Database:
     def insert_session(self, session: Session) -> int:
         cur = self._conn.execute(
             "INSERT INTO sessions (project_id, started_at, ended_at, duration,"
-            " pause_duration, running_since, status)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            " pause_duration, running_since, status, target_seconds)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 session.project_id,
                 _to_str(session.started_at),
@@ -229,6 +231,7 @@ class Database:
                 session.pause_duration,
                 _to_str(session.running_since),
                 session.status.value,
+                session.target_seconds,
             ),
         )
         self._conn.commit()
@@ -314,6 +317,20 @@ class Database:
             (_to_str(boundary),),
         ).fetchone()
         return float(row["total"])
+
+    def work_seconds_per_day(self, start: datetime, end: datetime) -> list[float]:
+        rows = self._conn.execute(
+            f"SELECT started_at, duration FROM sessions"
+            f" WHERE status IN {_COUNTED} AND started_at >= ? AND started_at < ?",
+            (_to_str(start), _to_str(end)),
+        ).fetchall()
+
+        day_secs: dict[int, float] = {}
+        for row in rows:
+            dt = datetime.fromisoformat(row["started_at"])
+            day_secs.setdefault(dt.weekday(), 0.0)
+            day_secs[dt.weekday()] += float(row["duration"])
+        return [day_secs.get(i, 0.0) for i in range(7)]
 
     def insert_contribution(self, contribution: Contribution) -> int:
         created = _to_str(contribution.created_at) or datetime.now().isoformat(timespec="seconds")
