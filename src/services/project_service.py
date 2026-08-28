@@ -147,11 +147,17 @@ class ProjectService:
 
     def global_totals(self) -> tuple[float, float]:
         today = self._now_fn().replace(hour=0, minute=0, second=0, microsecond=0)
-        week_start = today - timedelta(days=6)
+        week_start = today - timedelta(days=today.weekday())
         return (
             self._db.work_seconds_since(today),
             self._db.work_seconds_since(week_start),
         )
+
+    def weekly_daily_totals(self) -> list[float]:
+        today = self._now_fn().replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=7)
+        return self._db.work_seconds_per_day(week_start, week_end)
 
     def export_sessions_csv(self, path: str) -> int:
         return self._db.export_sessions_csv(Path(path))

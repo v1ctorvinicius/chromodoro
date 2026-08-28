@@ -17,7 +17,7 @@ def test_format_clock_minutes_and_seconds():
 
 
 def test_format_duration_buckets():
-    assert format_duration(30) == "under 1 min"
+    assert format_duration(30) == "0 min"
     assert format_duration(300) == "5 min"
     assert format_duration(5100) == "1h 25m"
     assert format_duration(7200) == "2h"

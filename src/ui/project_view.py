@@ -1,9 +1,18 @@
+import tkinter as tk
+from tkinter import font as tkfont
+
 import customtkinter as ctk
 
 from domain.project import Project
 from services.project_service import ProjectService
 from ui.dialogs import ProjectFormDialog, TextPromptDialog, confirm
 from utils.formatting import format_date_heading, format_day_label, format_duration, format_time
+
+_TK_BG = "#242424"
+_TK_CARD = "#2b2b2b"
+_TK_FG = "#DCE4EE"
+_TK_MUTED = "#9aa4b2"
+_TK_HEADING = "#8f959f"
 
 
 class ProjectView(ctk.CTkFrame):
@@ -126,16 +135,14 @@ class ProjectView(ctk.CTkFrame):
         self._on_changed()
 
     def _build_notes(self, parent) -> None:
-        header = ctk.CTkFrame(parent, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", pady=(6, 2))
         ctk.CTkLabel(
-            header, text="Notes", font=ctk.CTkFont(size=15, weight="bold"), anchor="w"
-        ).pack(side="left")
+            parent, text="Notes", font=ctk.CTkFont(size=15, weight="bold"), anchor="w"
+        ).grid(row=0, column=0, sticky="ew", pady=(6, 2))
         ctk.CTkButton(
-            header, text="+ Note", width=70, height=24, fg_color="transparent",
+            parent, text="+ Note", width=70, height=24, fg_color="transparent",
             border_width=1, border_color=("gray60", "gray35"),
             command=self._add_note,
-        ).pack(side="right")
+        ).grid(row=0, column=1, sticky="e", padx=8, pady=(6, 2))
 
         notes = self._projects.notes(self._project_id)
         if not notes:
@@ -145,34 +152,35 @@ class ProjectView(ctk.CTkFrame):
                 text_color="gray55",
             ).grid(row=1, column=0, sticky="w", padx=8, pady=(2, 8))
             return
+        body_font = tkfont.Font(size=13)
+        muted_font = tkfont.Font(size=11)
+        act_font = tkfont.Font(size=13)
         row = 1
         for note in notes:
-            item = ctk.CTkFrame(parent, fg_color="transparent")
-            item.grid(row=row, column=0, sticky="ew", padx=8, pady=3)
-            item.grid_columnconfigure(0, weight=1)
-            ctk.CTkLabel(
-                item, text="\u2022  " + note.title, font=ctk.CTkFont(size=13),
-                anchor="w", wraplength=620, justify="left",
+            item = tk.Frame(parent, bg=_TK_BG)
+            item.grid(row=row, column=0, columnspan=2, sticky="ew", padx=8, pady=3)
+            item.columnconfigure(0, weight=1)
+            tk.Label(
+                item, text="\u2022  " + note.title, font=body_font, fg=_TK_FG, bg=_TK_BG,
+                anchor="w", justify="left", wraplength=620,
             ).grid(row=0, column=0, sticky="w")
             created = note.created_at
             detail = format_day_label(created) if created is not None else ""
-            ctk.CTkLabel(
-                item, text=detail, text_color="gray55", font=ctk.CTkFont(size=11), anchor="w"
+            tk.Label(
+                item, text=detail, fg=_TK_MUTED, bg=_TK_BG, font=muted_font, anchor="w"
             ).grid(row=1, column=0, sticky="w", padx=(14, 0))
-            actions = ctk.CTkFrame(item, fg_color="transparent")
+            actions = tk.Frame(item, bg=_TK_BG)
             actions.grid(row=0, column=1, rowspan=2, padx=(8, 2))
-            ctk.CTkButton(
-                actions, text="\u270E", width=30, height=24, fg_color="transparent",
-                border_width=1, border_color=("gray60", "gray35"),
-                text_color=("gray40", "gray65"),
-                command=lambda n=note: self._edit_note(n),
-            ).pack(side="left", padx=2)
-            ctk.CTkButton(
-                actions, text="\U0001F5D1", width=30, height=24, fg_color="transparent",
-                border_width=1, border_color=("gray60", "gray35"),
-                text_color="#ef9a9a", hover_color=("gray88", "gray22"),
-                command=lambda n=note: self._delete_note(n),
-            ).pack(side="left", padx=2)
+            edit_lbl = tk.Label(
+                actions, text="\u270E", fg=_TK_FG, bg=_TK_BG, font=act_font, cursor="hand2"
+            )
+            edit_lbl.pack(side="left", padx=3)
+            del_lbl = tk.Label(
+                actions, text="\U0001F5D1", fg="#ef9a9a", bg=_TK_BG, font=act_font, cursor="hand2"
+            )
+            del_lbl.pack(side="left", padx=3)
+            edit_lbl.bind("<Button-1>", lambda _e: self._edit_note(note))
+            del_lbl.bind("<Button-1>", lambda _e: self._delete_note(note))
             row += 1
 
     def _stat_block(self, parent, column, value: str, caption: str) -> None:
@@ -195,41 +203,42 @@ class ProjectView(ctk.CTkFrame):
                 row=41, column=0, sticky="w", padx=8, pady=(2, 8)
             )
             return
+        body_font = tkfont.Font(size=13)
+        muted_font = tkfont.Font(size=11)
+        act_font = tkfont.Font(size=13)
         row = 41
         session_durations = {s.id: s.duration for s in self._projects.sessions(self._project_id)}
         for contribution in items:
-            item = ctk.CTkFrame(parent, fg_color="transparent")
+            item = tk.Frame(parent, bg=_TK_BG)
             item.grid(row=row, column=0, sticky="ew", padx=8, pady=3)
-            item.grid_columnconfigure(0, weight=1)
+            item.columnconfigure(0, weight=1)
 
             bullet = "\u2022  " + contribution.title
-            label = ctk.CTkLabel(
-                item, text=bullet, font=ctk.CTkFont(size=13), anchor="w", wraplength=620, justify="left"
-            )
-            label.grid(row=0, column=0, sticky="w")
+            tk.Label(
+                item, text=bullet, font=body_font, fg=_TK_FG, bg=_TK_BG,
+                anchor="w", justify="left", wraplength=620,
+            ).grid(row=0, column=0, sticky="w")
             created = contribution.created_at
             detail = format_day_label(created) if created is not None else ""
             duration = session_durations.get(contribution.session_id)
             if duration:
                 detail += f" — {format_duration(duration)}"
-            ctk.CTkLabel(
-                item, text=detail, text_color="gray55", font=ctk.CTkFont(size=11), anchor="w"
+            tk.Label(
+                item, text=detail, fg=_TK_MUTED, bg=_TK_BG, font=muted_font, anchor="w"
             ).grid(row=1, column=0, sticky="w", padx=(14, 0))
 
-            actions = ctk.CTkFrame(item, fg_color="transparent")
+            actions = tk.Frame(item, bg=_TK_BG)
             actions.grid(row=0, column=1, rowspan=2, padx=(8, 2))
-            ctk.CTkButton(
-                actions, text="\u270E", width=30, height=24, fg_color="transparent",
-                border_width=1, border_color=("gray60", "gray35"),
-                text_color=("gray40", "gray65"),
-                command=lambda c=contribution: self._edit_contribution(c),
-            ).pack(side="left", padx=2)
-            ctk.CTkButton(
-                actions, text="\U0001F5D1", width=30, height=24, fg_color="transparent",
-                border_width=1, border_color=("gray60", "gray35"),
-                text_color="#ef9a9a", hover_color=("gray88", "gray22"),
-                command=lambda c=contribution: self._delete_contribution(c),
-            ).pack(side="left", padx=2)
+            edit_lbl = tk.Label(
+                actions, text="\u270E", fg=_TK_FG, bg=_TK_BG, font=act_font, cursor="hand2"
+            )
+            edit_lbl.pack(side="left", padx=3)
+            del_lbl = tk.Label(
+                actions, text="\U0001F5D1", fg="#ef9a9a", bg=_TK_BG, font=act_font, cursor="hand2"
+            )
+            del_lbl.pack(side="left", padx=3)
+            edit_lbl.bind("<Button-1>", lambda _e: self._edit_contribution(contribution))
+            del_lbl.bind("<Button-1>", lambda _e: self._delete_contribution(contribution))
             row += 1
 
     def _edit_contribution(self, contribution) -> None:
@@ -277,6 +286,12 @@ class ProjectView(ctk.CTkFrame):
         self._projects.delete_contribution(note.id)
         self._on_changed()
     def _build_history(self, parent) -> None:
+        bold = tkfont.Font(size=15, weight="bold")
+        sub_bold = tkfont.Font(size=12, weight="bold")
+        body_font = tkfont.Font(size=13)
+        muted_font = tkfont.Font(size=12)
+        small_font = tkfont.Font(size=11)
+
         ctk.CTkLabel(
             parent, text="History", font=ctk.CTkFont(size=15, weight="bold"), anchor="w"
         ).grid(row=100, column=0, sticky="ew", pady=(18, 2))
@@ -299,59 +314,58 @@ class ProjectView(ctk.CTkFrame):
             grouped[heading].append(session)
 
         by_session = self._projects.contributions_by_session(self._project_id)
+        status_colors = {
+            "completed": "#66bb6a",
+            "interrupted": "#ffb74d",
+            "cancelled": _TK_MUTED,
+        }
 
         row = 101
         for heading in order:
-            ctk.CTkLabel(
-                parent, text=heading, text_color="gray50", font=ctk.CTkFont(size=12, weight="bold")
+            tk.Label(
+                parent, text=heading, font=sub_bold, fg=_TK_HEADING, bg=_TK_BG,
+                anchor="w", justify="left",
             ).grid(row=row, column=0, sticky="w", padx=8, pady=(8, 2))
             row += 1
             for session in grouped[heading]:
-                entry = ctk.CTkFrame(parent, fg_color=("gray92", "gray13"), corner_radius=8)
+                entry = tk.Frame(parent, bg=_TK_CARD, bd=0, highlightthickness=1,
+                                 highlightbackground=_TK_CARD)
                 entry.grid(row=row, column=0, sticky="ew", padx=8, pady=2)
                 entry.grid_columnconfigure(0, weight=1)
+                entry.columnconfigure(0, weight=1)
 
                 start = format_time(session.started_at)
-                end = format_time(session.ended_at) if session.ended_at else "…"
-                line = ctk.CTkFrame(entry, fg_color="transparent")
+                end = format_time(session.ended_at) if session.ended_at else "\u2026"
+                line = tk.Frame(entry, bg=_TK_CARD)
                 line.grid(row=0, column=0, sticky="ew", padx=12, pady=(8, 0))
-                ctk.CTkLabel(
-                    line, text=f"{start} – {end}", font=ctk.CTkFont(size=13, weight="bold")
-                ).pack(side="left")
-                ctk.CTkLabel(
-                    line,
-                    text=format_duration(session.duration),
-                    text_color="gray60",
-                    font=ctk.CTkFont(size=12),
+
+                tk.Label(line, text=f"{start} \u2013 {end}", font=bold, fg=_TK_FG, bg=_TK_CARD).pack(
+                    side="left"
+                )
+                tk.Label(
+                    line, text=format_duration(session.duration), font=muted_font, fg=_TK_MUTED, bg=_TK_CARD,
                 ).pack(side="left", padx=10)
                 if session.pause_duration > 0:
-                    ctk.CTkLabel(
+                    tk.Label(
                         line,
                         text=f"\u00B7 paused {format_duration(session.pause_duration)}",
-                        text_color="gray50",
-                        font=ctk.CTkFont(size=12),
+                        font=muted_font, fg=_TK_MUTED, bg=_TK_CARD,
                     ).pack(side="left")
-                status_colors = {
-                    "completed": "#66bb6a",
-                    "interrupted": "#ffb74d",
-                    "cancelled": "gray55",
-                }
-                ctk.CTkLabel(
+                tk.Label(
                     line,
                     text=session.status.value,
-                    text_color=status_colors.get(session.status.value, "gray55"),
-                    font=ctk.CTkFont(size=11),
+                    font=small_font,
+                    fg=status_colors.get(session.status.value, _TK_MUTED),
+                    bg=_TK_CARD,
                 ).pack(side="right")
 
                 contributions = by_session.get(session.id, [])
                 if contributions:
                     text = "\n".join(f"\u2022  {c.title}" for c in reversed(contributions))
-                    ctk.CTkLabel(
-                        entry, text=text, text_color="gray75", font=ctk.CTkFont(size=12), anchor="w",
-                        wraplength=680, justify="left",
+                    tk.Label(
+                        entry, text=text, font=body_font, fg="#c9d3de", bg=_TK_CARD,
+                        anchor="w", justify="left", wraplength=680,
                     ).grid(row=1, column=0, sticky="ew", padx=20, pady=(2, 8))
-                else:
-                    entry.grid_rowconfigure(1, minsize=6)
                 row += 1
 
     def _edit_project(self) -> None:

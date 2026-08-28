@@ -129,6 +129,7 @@ class SettingsDialog(ctk.CTkToplevel):
             close_to_tray=bool(self._tray_var.get()),
             start_in_tray=bool(self._start_tray_var.get()),
         )
+        self.destroy()
 
     def _test_sound(self) -> None:
         def play(index: int = 0) -> None:

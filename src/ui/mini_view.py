@@ -2,7 +2,7 @@ import customtkinter as ctk
 
 
 class MiniView(ctk.CTkToplevel):
-    def __init__(self, master, on_toggle, on_close, on_switch=None, on_refresh=None):
+    def __init__(self, master, on_toggle, on_close, on_switch=None, on_refresh=None, saved_position=None):
         super().__init__(master)
         self._on_toggle = on_toggle
         self._on_close = on_close
@@ -11,7 +11,11 @@ class MiniView(ctk.CTkToplevel):
 
         self.overrideredirect(True)
         self.wm_attributes("-topmost", True)
-        self.geometry("310x72+800+500")
+        if saved_position:
+            self.geometry(f"310x72+{saved_position}")
+        else:
+            self.geometry("310x72")
+            self._center_top()
         self.configure(fg_color=("#d7f2da", "#12351a"))
 
         self._drag_x = 0
@@ -107,6 +111,17 @@ class MiniView(ctk.CTkToplevel):
             command=lambda: None,
         )
         self._skip_btn.pack(side="left", padx=(2, 10))
+
+    def _center_top(self):
+        self.update_idletasks()
+        try:
+            sw = self.winfo_screenwidth()
+            sh = self.winfo_screenheight()
+            x = (sw - 310) // 2
+            y = int(sh * 0.25)
+            self.geometry(f"+{x}+{y}")
+        except Exception:
+            self.geometry("+800+500")
 
     def _start_drag(self, event):
         self._drag_x = event.x

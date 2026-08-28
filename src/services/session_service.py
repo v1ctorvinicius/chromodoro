@@ -46,7 +46,12 @@ class SessionService:
     def start(self, project_id: int) -> Session:
         self._require_no_active("A session is already active")
         now = self._now_fn()
-        session = Session(project_id=project_id, started_at=now, running_since=now)
+        session = Session(
+            project_id=project_id,
+            started_at=now,
+            running_since=now,
+            target_seconds=self.config.work_minutes * 60,
+        )
         session.id = self._db.insert_session(session)
         self.active = session
         self._timer.start(self.config.work_minutes * 60, TimerMode.WORK)
@@ -147,8 +152,9 @@ class SessionService:
 
     def adopt(self, session: Session) -> Session:
         self._require_no_active("Another session is already active")
+        target = session.target_seconds if session.target_seconds else self.config.work_minutes * 60
         self._timer.adopt(
-            target_seconds=self.config.work_minutes * 60,
+            target_seconds=target,
             elapsed_base=session.duration,
             pause_seconds=session.pause_duration,
             segment_start=session.running_since,

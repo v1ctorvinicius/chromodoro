@@ -76,6 +76,8 @@ class ChromodoroApp(ctk.CTk):
         self._tray = TrayController(APP_NAME)
         self._quit_from_tray = False
         self._mini_view = None
+        self._mini_pending_project: int | None = None
+        self._cached_dashboard = None
 
         self.bind("<FocusIn>", self._on_focus_in)
         self.bind("<space>", self._on_space_key)
@@ -108,8 +110,11 @@ class ChromodoroApp(ctk.CTk):
         traceback.print_exception(exc, val, tb)
 
     def _swap(self, frame) -> None:
-        if self._view is not None:
-            self._view.destroy()
+        previous = self._view
+        if previous is not None and previous is not frame:
+            previous.grid_remove()
+            if previous is not self._cached_dashboard:
+                previous.destroy()
         frame.grid(row=0, column=0, sticky="nsew")
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -131,11 +136,30 @@ class ChromodoroApp(ctk.CTk):
 
     def _toggle_active_pause(self) -> None:
         if self._sessions.active is None:
+            if self._mini_pending_project is not None:
+                self._start_break_from_mini()
+                return
+            if self._timer.mode is TimerMode.BREAK:
+                if self._timer.is_running:
+                    self._timer.pause()
+                elif self._timer.state.value == "paused":
+                    self._timer.resume()
             return
         if self._timer.state.value == "paused":
             self._sessions.resume()
         else:
             self._sessions.pause()
+
+    def _start_break_from_mini(self) -> None:
+        try:
+            seconds = self._sessions.start_break()
+            self._timer.start(seconds, TimerMode.BREAK)
+        except Exception:
+            return
+        self._mini_pending_project = None
+        if self._mini_view is not None and self._mini_view.winfo_exists():
+            self._mini_view.show_normal()
+        self._refresh_mini()
 
     def _open_active_focus(self) -> None:
         active = self._sessions.active
@@ -181,9 +205,19 @@ class ChromodoroApp(ctk.CTk):
             pass
         self._mini_view.destroy()
         self._mini_view = None
+        self._mini_pending_project = None
         self.deiconify()
         self.lift()
+        self._refresh_main_view_state()
         self.focus_force()
+
+    def _refresh_main_view_state(self) -> None:
+        from ui.timer_view import TimerView
+
+        if not isinstance(self._view, TimerView):
+            return
+        if self._sessions.active is None and self._timer.mode is TimerMode.BREAK:
+            self._view.refresh_state()
 
     def _refresh_mini(self) -> None:
         if self._mini_view is None or not self._mini_view.winfo_exists():
@@ -224,6 +258,7 @@ class ChromodoroApp(ctk.CTk):
         chosen = dialog.show()
         if chosen is not None:
             self._sessions.switch_to(chosen)
+            self._mini_pending_project = None
             self._refresh_mini()
 
     def _mini_log(self, session) -> None:
@@ -257,13 +292,17 @@ class ChromodoroApp(ctk.CTk):
         self._refresh_mini()
 
     def _mini_break_done(self) -> None:
+        started = False
         if self._auto_start_enabled():
             active = self._sessions.active
             if active is not None and active.project_id is not None:
                 try:
                     self._sessions.start(active.project_id)
+                    started = True
                 except Exception:
                     pass
+        if started:
+            self._mini_pending_project = None
         if self._mini_view is not None and self._mini_view.winfo_exists():
             self._mini_view.show_normal()
         self._refresh_mini()
@@ -277,8 +316,8 @@ class ChromodoroApp(ctk.CTk):
             for pid, seconds in self._sessions.parked_map().items()
             if pid != active_pid
         }
-        self._swap(
-            Dashboard(
+        if self._cached_dashboard is None:
+            self._cached_dashboard = Dashboard(
                 self,
                 self._projects,
                 on_open_project=self.open_project,
@@ -293,7 +332,14 @@ class ChromodoroApp(ctk.CTk):
                 on_quit=self._force_quit,
                 on_widget=self._toggle_mini,
             )
-        )
+        else:
+            self._cached_dashboard._summaries_all = self._projects.list_summaries()
+            self._cached_dashboard.update_state(
+                active_project_id=active_pid,
+                active_state=self._timer.state.value if active is not None else None,
+                parked_map=parked,
+            )
+        self._swap(self._cached_dashboard)
 
     def _on_project_data_changed(self) -> None:
         self._project_name_cache.clear()
@@ -477,6 +523,9 @@ class ChromodoroApp(ctk.CTk):
         if self._timer.mode is TimerMode.WORK and self._sessions.has_active:
             finished = self._sessions.complete()
             if self._mini_view is not None and self._mini_view.winfo_exists():
+                if finished.project_id is not None:
+                    self._mini_pending_project = finished.project_id
+                self._stop_alerts()
                 self._mini_view.show_completion(
                     format_duration(finished.duration or 0),
                     on_log=lambda s=finished: self._mini_log(s),
@@ -486,6 +535,7 @@ class ChromodoroApp(ctk.CTk):
                 self._view.show_review(finished)
         else:
             if self._mini_view is not None and self._mini_view.winfo_exists():
+                self._stop_alerts()
                 self._mini_view.show_break(
                     "Ready?",
                     on_start=self._mini_break_done,
@@ -669,6 +719,18 @@ def main(db_path=None, *, on_already_running=None) -> None:
     if not acquire_instance_lock(path):
         handler()
         return
+    try:
+        ctk.deactivate_automatic_dpi_awareness()
+    except Exception:
+        pass
+    ctk.set_widget_scaling(1.0)
+    ctk.set_window_scaling(1.0)
+    try:
+        from customtkinter.windows.widgets.core_rendering import DrawEngine
+
+        DrawEngine.preferred_drawing_method = "circle_shapes"
+    except Exception:
+        pass
     app = ChromodoroApp(db_path=db_path)
     app.mainloop()
 

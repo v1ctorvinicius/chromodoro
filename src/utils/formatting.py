@@ -13,7 +13,7 @@ def format_clock(seconds: float) -> str:
 def format_duration(seconds: float) -> str:
     total = max(0, int(round(seconds)))
     if total < 60:
-        return "under 1 min"
+        return "0 min"
     hours, rem = divmod(total, 3600)
     minutes = rem // 60
     if hours == 0:

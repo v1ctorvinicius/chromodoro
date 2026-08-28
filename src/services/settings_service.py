@@ -24,6 +24,7 @@ class SettingsService:
         return self._cache
 
     def save(self, settings: AppSettings) -> AppSettings:
+        previous = self._cache
         validated = AppSettings(
             work_minutes=settings.work_minutes,
             break_minutes=settings.break_minutes,
@@ -45,6 +46,10 @@ class SettingsService:
             ("start_in_tray", int(validated.start_in_tray)),
         ):
             self._db.set_setting(key, str(value))
+        if previous is not None and (
+            previous.cycles_before_long_break != validated.cycles_before_long_break
+        ):
+            self.reset_cycle()
         self._cache = None
         return self.load()
 
@@ -63,6 +68,12 @@ class SettingsService:
 
     def reset_cycle(self) -> None:
         self._db.set_setting(_CYCLE_KEY, "0")
+
+    def get_str(self, key: str) -> str | None:
+        return self._db.get_setting(key)
+
+    def set_str(self, key: str, value: str) -> None:
+        self._db.set_setting(key, value)
 
     def _int_setting(self, key: str, default: int) -> int:
         raw = self._db.get_setting(key)

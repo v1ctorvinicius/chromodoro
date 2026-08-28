@@ -20,6 +20,7 @@ class Session:
     status: SessionStatus = SessionStatus.RUNNING
     running_since: datetime | None = None
     id: int | None = None
+    target_seconds: float = 0.0
 
     def work_seconds(self, now: datetime) -> float:
         if self.running_since is not None:

@@ -54,6 +54,14 @@ class TrayController:
         except Exception:
             pass
 
+    def update_icon(self, running: bool) -> None:
+        if self._icon is None:
+            return
+        try:
+            self._icon.icon = _icon_image(running)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
     def stop(self) -> None:
         if self._icon is None:
             return

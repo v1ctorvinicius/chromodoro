@@ -117,6 +117,9 @@ class TimerView(ctk.CTkFrame):
         else:
             self._render_running()
 
+    def refresh_state(self) -> None:
+        self._render()
+
     def _header(self) -> None:
         ctk.CTkLabel(
             self._content, text=self._project.name.upper(), text_color="gray55",
@@ -259,8 +262,9 @@ class TimerView(ctk.CTkFrame):
         ).pack(side="left", padx=6)
         if self._on_toggle_mini is not None:
             ctk.CTkButton(
-                links, text="\u25A1 Mini Widget", width=90, height=28, fg_color="transparent",
-                text_color="gray60", border_width=0, hover_color=("gray92", "gray17"),
+                links, text="\u25A1 Mini Widget", width=90, height=28,
+                fg_color=("#4a6fa5", "#3a5a8a"),
+                text_color="white", hover_color=("#3a5a8a", "#2a4a7a"),
                 command=self._on_toggle_mini,
             ).pack(side="left", padx=6)
 
@@ -430,8 +434,12 @@ class TimerView(ctk.CTkFrame):
             text=format_clock(self._timer.remaining()),
             font=ctk.CTkFont(family="Consolas", size=72, weight="bold"),
         )
+        progress = ctk.CTkProgressBar(self._content, width=420, height=12, corner_radius=6)
+        progress.set(self._timer.progress())
         self._clock_label = clock_label
+        self._progress = progress
         clock_label.grid(row=3, column=0, pady=(24, 24))
+        progress.grid(row=4, column=0, pady=(0, 30))
         ctk.CTkButton(self._content, text="Skip break", width=140, height=36, command=self._skip_break).grid(
             row=5, column=0
         )
