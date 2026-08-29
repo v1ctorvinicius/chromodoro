@@ -13,3 +13,6 @@ build/
 *.egg-info/
 .idea/
 .vscode/
+node_modules/
+api-chromodoro/
+
