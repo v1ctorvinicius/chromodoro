@@ -33,7 +33,15 @@ class ProjectService:
         self._db = db
         self._now_fn = now_fn
 
-    def create_project(self, name: str, description: str = "", daily_goal_minutes: float = 0.0) -> Project:
+    def create_project(
+        self,
+        name: str,
+        description: str = "",
+        daily_goal_minutes: float = 0.0,
+        weekly_goal_minutes: float = 0.0,
+        monthly_goal_minutes: float = 0.0,
+        goal_days_of_week: list[int] | None = None,
+    ) -> Project:
         cleaned = name.strip()
         if not cleaned:
             raise ValueError("Project name must not be empty")
@@ -42,6 +50,9 @@ class ProjectService:
             description=description.strip(),
             created_at=self._now_fn(),
             daily_goal_minutes=_clamp_goal(daily_goal_minutes),
+            weekly_goal_minutes=_clamp_goal(weekly_goal_minutes),
+            monthly_goal_minutes=_clamp_goal(monthly_goal_minutes),
+            goal_days_of_week=_normalize_days(goal_days_of_week),
         )
         return self._db.insert_project(project)
 
@@ -57,6 +68,9 @@ class ProjectService:
         name: str,
         description: str,
         daily_goal_minutes: float | None = None,
+        weekly_goal_minutes: float | None = None,
+        monthly_goal_minutes: float | None = None,
+        goal_days_of_week: list[int] | None = None,
     ) -> Project:
         cleaned = name.strip()
         if not cleaned:
@@ -65,6 +79,12 @@ class ProjectService:
         project.description = description.strip()
         if daily_goal_minutes is not None:
             project.daily_goal_minutes = _clamp_goal(daily_goal_minutes)
+        if weekly_goal_minutes is not None:
+            project.weekly_goal_minutes = _clamp_goal(weekly_goal_minutes)
+        if monthly_goal_minutes is not None:
+            project.monthly_goal_minutes = _clamp_goal(monthly_goal_minutes)
+        if goal_days_of_week is not None:
+            project.goal_days_of_week = _normalize_days(goal_days_of_week)
         self._db.update_project(project)
         return project
 
@@ -77,6 +97,8 @@ class ProjectService:
         today = self._now_fn().replace(hour=0, minute=0, second=0, microsecond=0)
         summaries = []
         for row in self._db.project_summary_rows("active", today):
+            # goal_days stored as comma string
+            raw_days = row["goal_days_of_week"] if "goal_days_of_week" in row.keys() else ""
             project = Project(
                 id=row["id"],
                 name=row["name"],
@@ -84,6 +106,13 @@ class ProjectService:
                 status=row["status"],
                 created_at=datetime.fromisoformat(row["created_at"]),
                 daily_goal_minutes=float(row["daily_goal_minutes"]),
+                weekly_goal_minutes=float(row["weekly_goal_minutes"])
+                if "weekly_goal_minutes" in row.keys()
+                else 0.0,
+                monthly_goal_minutes=float(row["monthly_goal_minutes"])
+                if "monthly_goal_minutes" in row.keys()
+                else 0.0,
+                goal_days_of_week=_parse_days_raw(raw_days),
             )
             summaries.append(
                 ProjectSummary(
@@ -159,6 +188,30 @@ class ProjectService:
         week_end = week_start + timedelta(days=7)
         return self._db.work_seconds_per_day(week_start, week_end)
 
+    def project_period_seconds(self, project_id: int, period: str) -> float:
+        now = self._now_fn()
+        project = self.get_project(project_id)
+        allowed = project.goal_days_of_week
+        if period == "daily":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            sessions = [s for s in self._db.list_sessions(project_id) if s.started_at >= start]
+        elif period == "weekly":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=now.weekday())
+            sessions = [s for s in self._db.list_sessions(project_id) if s.started_at >= start]
+        elif period == "monthly":
+            start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            sessions = [s for s in self._db.list_sessions(project_id) if s.started_at >= start]
+        else:
+            return 0.0
+        # filter by allowed weekdays if set
+        if allowed:
+            sessions = [s for s in sessions if s.started_at.weekday() in allowed]
+        # only counted statuses
+        from domain.session import SessionStatus
+
+        counted = {SessionStatus.COMPLETED, SessionStatus.INTERRUPTED}
+        return sum(s.duration for s in sessions if s.status in counted)
+
     def export_sessions_csv(self, path: str) -> int:
         return self._db.export_sessions_csv(Path(path))
 
@@ -173,6 +226,25 @@ def _parse(value: str | None) -> datetime | None:
     if value is None:
         return None
     return datetime.fromisoformat(value)
+
+
+def _parse_days_raw(value: str | None) -> list[int] | None:
+    if not value:
+        return None
+    try:
+        parts = [p.strip() for p in value.split(",") if p.strip() != ""]
+        days = [int(p) for p in parts]
+        days = [d for d in days if 0 <= d <= 6]
+        return sorted(set(days)) or None
+    except Exception:
+        return None
+
+
+def _normalize_days(days: list[int] | None) -> list[int] | None:
+    if not days:
+        return None
+    cleaned = sorted({int(d) for d in days if 0 <= int(d) <= 6})
+    return cleaned or None
 
 
 def _clamp_goal(minutes: float) -> float:

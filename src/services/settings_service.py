@@ -46,9 +46,7 @@ class SettingsService:
             ("start_in_tray", int(validated.start_in_tray)),
         ):
             self._db.set_setting(key, str(value))
-        if previous is not None and (
-            previous.cycles_before_long_break != validated.cycles_before_long_break
-        ):
+        if previous is not None and (previous.cycles_before_long_break != validated.cycles_before_long_break):
             self.reset_cycle()
         self._cache = None
         return self.load()

@@ -27,9 +27,7 @@ class MiniView(ctk.CTkToplevel):
 
         self.grid_columnconfigure(1, weight=1)
 
-        self._dot = ctk.CTkLabel(
-            self, text="\u25CF", text_color="#66bb6a", font=ctk.CTkFont(size=13)
-        )
+        self._dot = ctk.CTkLabel(self, text="\u25cf", text_color="#66bb6a", font=ctk.CTkFont(size=13))
         self._dot.grid(row=0, column=0, padx=(12, 4), pady=(14, 0))
 
         self._clock_label = ctk.CTkLabel(
@@ -47,7 +45,7 @@ class MiniView(ctk.CTkToplevel):
 
         self._toggle_btn = ctk.CTkButton(
             btn_frame,
-            text="\u23F8",
+            text="\u23f8",
             width=36,
             height=28,
             fg_color="transparent",
@@ -60,7 +58,7 @@ class MiniView(ctk.CTkToplevel):
         if self._on_switch is not None:
             ctk.CTkButton(
                 btn_frame,
-                text="\u21C4",
+                text="\u21c4",
                 width=28,
                 height=28,
                 fg_color="transparent",
@@ -140,7 +138,7 @@ class MiniView(ctk.CTkToplevel):
     def update_info(self, clock_text: str, running: bool, project_name: str):
         self._clock_label.configure(text=clock_text)
         self._name_label.configure(text=project_name)
-        self._toggle_btn.configure(text="\u23F8" if running else "\u25B6")
+        self._toggle_btn.configure(text="\u23f8" if running else "\u25b6")
         self._dot.configure(text_color="#66bb6a" if running else "#ffb74d")
         bg = ("#d7f2da", "#12351a") if running else ("#fdeeca", "#3a2c0e")
         self.configure(fg_color=bg)

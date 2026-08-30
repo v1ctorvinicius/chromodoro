@@ -36,14 +36,14 @@ class FocusBar(tk.Frame):
         bold = tkfont.Font(size=13, weight="bold")
         small = tkfont.Font(size=12)
 
-        self._dot = tk.Label(self, text="\u25CF", fg=_RUN_DOT, bg=_RUN_BG, font=("Segoe UI", 13))
+        self._dot = tk.Label(self, text="\u25cf", fg=_RUN_DOT, bg=_RUN_BG, font=("Segoe UI", 13))
         self._dot.grid(row=0, column=0, padx=(14, 8), pady=8)
         self._info = tk.Label(self, text="", font=bold, fg=_TEXT, bg=_RUN_BG, anchor="w")
         self._info.grid(row=0, column=1, sticky="w")
 
         self._toggle_btn = tk.Button(
             self,
-            text="\u23F8",
+            text="\u23f8",
             width=3,
             bg=_RUN_BG,
             fg=_TEXT,
@@ -60,7 +60,7 @@ class FocusBar(tk.Frame):
         self._toggle_btn.grid(row=0, column=2, padx=(6, 4), pady=4)
 
         self._open_label = tk.Label(
-            self, text="Open focus \u25B8", fg=_MUTED, bg=_RUN_BG, font=small, cursor="hand2"
+            self, text="Open focus \u25b8", fg=_MUTED, bg=_RUN_BG, font=small, cursor="hand2"
         )
         self._open_label.grid(row=0, column=3, padx=(2, 14))
 
@@ -91,7 +91,7 @@ class FocusBar(tk.Frame):
         self._open_label.configure(bg=bg)
         self.configure(bg=bg)
         self._toggle_btn.configure(
-            text="\u23F8" if running else "\u25B6",
+            text="\u23f8" if running else "\u25b6",
             bg=bg,
             activebackground=bg,
             fg=_TEXT,

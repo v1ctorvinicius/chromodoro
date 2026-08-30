@@ -311,11 +311,7 @@ class ChromodoroApp(ctk.CTk):
         self.title(APP_NAME)
         active = self._sessions.active
         active_pid = active.project_id if active is not None else None
-        parked = {
-            pid: seconds
-            for pid, seconds in self._sessions.parked_map().items()
-            if pid != active_pid
-        }
+        parked = {pid: seconds for pid, seconds in self._sessions.parked_map().items() if pid != active_pid}
         if self._cached_dashboard is None:
             self._cached_dashboard = Dashboard(
                 self,
@@ -377,8 +373,15 @@ class ChromodoroApp(ctk.CTk):
         dialog = ProjectFormDialog(self, title="New project")
         result = dialog.show()
         if result:
-            name, description, goal = result
-            project = self._projects.create_project(name, description, daily_goal_minutes=goal)
+            name, description, daily, weekly, monthly, days = result
+            project = self._projects.create_project(
+                name,
+                description,
+                daily_goal_minutes=daily,
+                weekly_goal_minutes=weekly,
+                monthly_goal_minutes=monthly,
+                goal_days_of_week=days,
+            )
             assert project.id is not None
             self.open_project(project.id)
         else:

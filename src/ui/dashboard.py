@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -61,7 +61,7 @@ class Dashboard(ctk.CTkFrame):
         header.grid(row=0, column=0, sticky="ew", padx=32, pady=(24, 12))
         header.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(header, text="Projects", font=ctk.CTkFont(size=28, weight="bold")).grid(
-            row=0, column=0
+            row=0, column=0, sticky="w"
         )
 
         self._filter_var = ctk.StringVar(value="")
@@ -69,7 +69,10 @@ class Dashboard(ctk.CTkFrame):
             row=0, column=1, padx=(16, 4)
         )
         search_entry = ctk.CTkEntry(
-            header, placeholder_text="type a project name", width=200, height=30,
+            header,
+            placeholder_text="type a project name",
+            width=200,
+            height=30,
             textvariable=self._filter_var,
         )
         search_entry.grid(row=0, column=2, padx=(0, 0))
@@ -78,6 +81,60 @@ class Dashboard(ctk.CTkFrame):
         ctk.CTkButton(header, text="+ New project", width=140, command=self._on_new_project).grid(
             row=0, column=3, padx=(16, 0)
         )
+
+        # Filter bar
+        filt = ctk.CTkFrame(header, fg_color="transparent")
+        filt.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(12, 0))
+        for c in range(8):
+            filt.grid_columnconfigure(c, weight=0)
+
+        ctk.CTkLabel(filt, text="Period:", text_color="gray60", font=ctk.CTkFont(size=12)).grid(
+            row=0, column=0, padx=(0, 4)
+        )
+        self._period_var = ctk.StringVar(value="All time")
+        ctk.CTkOptionMenu(
+            filt,
+            values=["All time", "Today", "This week", "This month"],
+            variable=self._period_var,
+            width=130,
+            command=lambda _: self._refresh_cards(),
+        ).grid(row=0, column=1, padx=4)
+
+        ctk.CTkLabel(filt, text="Goals:", text_color="gray60", font=ctk.CTkFont(size=12)).grid(
+            row=0, column=2, padx=(12, 4)
+        )
+        self._goal_filter_var = ctk.StringVar(value="All")
+        ctk.CTkOptionMenu(
+            filt,
+            values=["All", "With goal", "No goal", "Achieved", "Pending"],
+            variable=self._goal_filter_var,
+            width=130,
+            command=lambda _: self._refresh_cards(),
+        ).grid(row=0, column=3, padx=4)
+
+        ctk.CTkLabel(filt, text="Activity:", text_color="gray60", font=ctk.CTkFont(size=12)).grid(
+            row=0, column=4, padx=(12, 4)
+        )
+        self._activity_var = ctk.StringVar(value="All")
+        ctk.CTkOptionMenu(
+            filt,
+            values=["All", "Active today", "Active this week", "Inactive 7d+"],
+            variable=self._activity_var,
+            width=140,
+            command=lambda _: self._refresh_cards(),
+        ).grid(row=0, column=5, padx=4)
+
+        ctk.CTkLabel(filt, text="Sort:", text_color="gray60", font=ctk.CTkFont(size=12)).grid(
+            row=0, column=6, padx=(12, 4)
+        )
+        self._sort_var = ctk.StringVar(value="Last activity")
+        ctk.CTkOptionMenu(
+            filt,
+            values=["Last activity", "Name", "Total time", "Sessions"],
+            variable=self._sort_var,
+            width=130,
+            command=lambda _: self._refresh_cards(),
+        ).grid(row=0, column=7, padx=4)
 
     def _on_new_project(self) -> None:
         self._on_new_project_cb()
@@ -125,41 +182,75 @@ class Dashboard(ctk.CTkFrame):
         exports = ctk.CTkFrame(btn_row, fg_color="transparent")
         exports.grid(row=0, column=0, sticky="w")
         ctk.CTkButton(
-            exports, text="Export sessions", width=140, height=26, fg_color="transparent",
-            border_width=1, border_color=("gray70", "gray30"),
-            text_color=("gray30", "gray65"), command=self._export_sessions,
+            exports,
+            text="Export sessions",
+            width=140,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray70", "gray30"),
+            text_color=("gray30", "gray65"),
+            command=self._export_sessions,
         ).pack(side="left", padx=(4, 6))
         ctk.CTkButton(
-            exports, text="Export contributions", width=170, height=26, fg_color="transparent",
-            border_width=1, border_color=("gray70", "gray30"),
-            text_color=("gray30", "gray65"), command=self._export_contributions,
+            exports,
+            text="Export contributions",
+            width=170,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray70", "gray30"),
+            text_color=("gray30", "gray65"),
+            command=self._export_contributions,
         ).pack(side="left", padx=6)
         ctk.CTkButton(
-            exports, text="Backup database", width=150, height=26, fg_color="transparent",
-            border_width=1, border_color=("gray70", "gray30"),
-            text_color=("gray30", "gray65"), command=self._backup_database,
+            exports,
+            text="Backup database",
+            width=150,
+            height=26,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray70", "gray30"),
+            text_color=("gray30", "gray65"),
+            command=self._backup_database,
         ).pack(side="left", padx=6)
 
         actions = ctk.CTkFrame(btn_row, fg_color="transparent")
         actions.grid(row=0, column=2, sticky="e")
         if self._on_widget is not None:
             self._widget_btn = ctk.CTkButton(
-                actions, text="\u25A1 Mini Widget", width=100, height=26,
+                actions,
+                text="\u25a1 Mini Widget",
+                width=100,
+                height=26,
                 fg_color=("#4a6fa5", "#3a5a8a"),
-                text_color="white", command=self._on_widget,
+                text_color="white",
+                command=self._on_widget,
             )
             self._widget_btn.pack(side="left", padx=(0, 6))
         if self._on_open_settings is not None:
             ctk.CTkButton(
-                actions, text="\u2699 Settings", width=110, height=26, fg_color="transparent",
-                border_width=1, border_color=("gray70", "gray30"),
-                text_color=("gray30", "gray65"), command=self._on_open_settings,
+                actions,
+                text="\u2699 Settings",
+                width=110,
+                height=26,
+                fg_color="transparent",
+                border_width=1,
+                border_color=("gray70", "gray30"),
+                text_color=("gray30", "gray65"),
+                command=self._on_open_settings,
             ).pack(side="left", padx=6)
         if self._on_quit is not None:
             ctk.CTkButton(
-                actions, text="Quit", width=60, height=26, fg_color="transparent",
-                border_width=1, border_color=("gray70", "gray30"),
-                text_color=("#c62828", "#ef9a9a"), hover_color=("gray88", "gray22"),
+                actions,
+                text="Quit",
+                width=60,
+                height=26,
+                fg_color="transparent",
+                border_width=1,
+                border_color=("gray70", "gray30"),
+                text_color=("#c62828", "#ef9a9a"),
+                hover_color=("gray88", "gray22"),
                 command=self._on_quit,
             ).pack(side="left", padx=6)
 
@@ -243,13 +334,93 @@ class Dashboard(ctk.CTkFrame):
             w.destroy()
         self._refresh_cards()
 
+    def _get_filtered_summaries(self):
+        filt = self._filter_var.get().strip().lower() if hasattr(self, "_filter_var") else ""
+        period = self._period_var.get() if hasattr(self, "_period_var") else "All time"
+        goal_f = self._goal_filter_var.get() if hasattr(self, "_goal_filter_var") else "All"
+        activity = self._activity_var.get() if hasattr(self, "_activity_var") else "All"
+        sort_key = self._sort_var.get() if hasattr(self, "_sort_var") else "Last activity"
+
+        now = datetime.now()
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = today - timedelta(days=today.weekday())
+        month_start = today.replace(day=1)
+
+        out = []
+        for s in self._summaries_all:
+            if filt and filt not in s.project.name.lower():
+                continue
+            # period filter (calendar)
+            if period != "All time":
+                la = s.last_activity
+                if la is None:
+                    continue
+                if period == "Today" and la < today:
+                    continue
+                if period == "This week" and la < week_start:
+                    continue
+                if period == "This month" and la < month_start:
+                    continue
+            # goal filter
+            has_goal = any(
+                getattr(s.project, k) > 0
+                for k in ("daily_goal_minutes", "weekly_goal_minutes", "monthly_goal_minutes")
+            )
+            if goal_f == "With goal" and not has_goal:
+                continue
+            if goal_f == "No goal" and has_goal:
+                continue
+            if goal_f in ("Achieved", "Pending"):
+                if not has_goal:
+                    continue
+                # check at least one achieved
+                achieved = False
+                for per in ("daily", "weekly", "monthly"):
+                    minutes = getattr(s.project, f"{per}_goal_minutes")
+                    if minutes > 0:
+                        assert s.project.id is not None
+                        cur = self._projects.project_period_seconds(s.project.id, per)
+                        if cur >= minutes * 60:
+                            achieved = True
+                            break
+                if goal_f == "Achieved" and not achieved:
+                    continue
+                if goal_f == "Pending" and achieved:
+                    # pending = has goal but not all achieved? treat as not achieved
+                    continue
+            # activity filter
+            if activity != "All":
+                la = s.last_activity
+                if activity == "Active today":
+                    if la is None or la < today:
+                        continue
+                elif activity == "Active this week":
+                    if la is None or la < week_start:
+                        continue
+                elif activity == "Inactive 7d+":
+                    if la is not None and la >= (today - timedelta(days=7)):
+                        continue
+            out.append(s)
+
+        # sort
+        if sort_key == "Name":
+            out.sort(key=lambda x: x.project.name.lower())
+        elif sort_key == "Total time":
+            out.sort(key=lambda x: x.total_seconds, reverse=True)
+        elif sort_key == "Sessions":
+            out.sort(key=lambda x: x.session_count, reverse=True)
+        else:  # Last activity
+            out.sort(
+                key=lambda x: (
+                    x.last_activity is None,
+                    -(x.last_activity.timestamp() if x.last_activity else 0),
+                )
+            )
+        return out
+
     def _refresh_cards(self) -> None:
         self._search_job = None
-        filter_text = self._filter_var.get().strip().lower() if hasattr(self, "_filter_var") else ""
-        summaries = [
-            s for s in self._summaries_all
-            if filter_text in s.project.name.lower()
-        ]
+        summaries = self._get_filtered_summaries()
         if not summaries:
             existing = getattr(self, "_cards", None)
             if existing:
@@ -262,7 +433,8 @@ class Dashboard(ctk.CTkFrame):
                 ctk.CTkLabel(
                     self._empty_frame,
                     text="No projects yet.\nCreate one and start accumulating focused work."
-                    if not self._summaries_all else "No matching projects.",
+                    if not self._summaries_all
+                    else "No matching projects.",
                     text_color="gray60",
                     justify="center",
                     font=ctk.CTkFont(size=14),
@@ -303,13 +475,24 @@ class Dashboard(ctk.CTkFrame):
             name=project.name,
             description=project.description,
             daily_goal_minutes=project.daily_goal_minutes,
+            weekly_goal_minutes=project.weekly_goal_minutes,
+            monthly_goal_minutes=project.monthly_goal_minutes,
+            goal_days_of_week=project.goal_days_of_week,
         )
         result = dialog.show()
         if not result:
             return
-        name, description, goal = result
+        name, description, daily, weekly, monthly, days = result
         try:
-            self._projects.update_project(project, name, description, daily_goal_minutes=goal)
+            self._projects.update_project(
+                project,
+                name,
+                description,
+                daily_goal_minutes=daily,
+                weekly_goal_minutes=weekly,
+                monthly_goal_minutes=monthly,
+                goal_days_of_week=days,
+            )
         except ValueError:
             return
         self._refresh()
@@ -334,30 +517,37 @@ class Dashboard(ctk.CTkFrame):
         info = ctk.CTkFrame(card, fg_color="transparent")
         info.grid(row=0, column=0, sticky="ew", padx=20, pady=16)
 
-        name_label = ctk.CTkLabel(
-            info, text="", font=ctk.CTkFont(size=18, weight="bold"), anchor="w"
-        )
+        name_label = ctk.CTkLabel(info, text="", font=ctk.CTkFont(size=18, weight="bold"), anchor="w")
         name_label.pack(anchor="w")
         status_frame = ctk.CTkFrame(info, fg_color="transparent")
 
-        meta_label = ctk.CTkLabel(
-            info, text="", text_color="gray60", font=ctk.CTkFont(size=13), anchor="w"
-        )
+        meta_label = ctk.CTkLabel(info, text="", text_color="gray60", font=ctk.CTkFont(size=13), anchor="w")
 
         actions = ctk.CTkFrame(card, fg_color="transparent")
         actions.grid(row=0, column=1, padx=(0, 20), pady=16)
         work_button = ctk.CTkButton(actions, text="", width=110, height=34)
         work_button.grid(row=0, column=0)
         ctk.CTkButton(
-            actions, text="\u270E", width=34, height=34, fg_color="transparent",
-            border_width=1, border_color=("gray65", "gray35"),
+            actions,
+            text="\u270e",
+            width=34,
+            height=34,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray65", "gray35"),
             text_color=("gray40", "gray65"),
             command=lambda: self._edit_project(summary),
         ).grid(row=0, column=1, padx=(8, 0))
         ctk.CTkButton(
-            actions, text="\U0001F4E6", width=34, height=34, fg_color="transparent",
-            border_width=1, border_color=("gray65", "gray35"),
-            text_color="#ef9a9a", hover_color=("gray88", "gray22"),
+            actions,
+            text="\U0001f4e6",
+            width=34,
+            height=34,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray65", "gray35"),
+            text_color="#ef9a9a",
+            hover_color=("gray88", "gray22"),
             command=lambda: self._archive_project(summary),
         ).grid(row=0, column=2, padx=(6, 0))
 
@@ -380,19 +570,24 @@ class Dashboard(ctk.CTkFrame):
         for w in card.status_frame.winfo_children():
             w.destroy()
         if summary.project.id == self._active_project_id and self._active_state is not None:
-            badge_text = "\u25CF  Running" if self._active_state == "running" else "\u2758\u2758  Paused"
+            badge_text = "\u25cf  Running" if self._active_state == "running" else "\u2758\u2758  Paused"
             badge_color = "#66bb6a" if self._active_state == "running" else "#ffb74d"
             ctk.CTkLabel(
-                card.status_frame, text=badge_text, text_color=badge_color,
-                font=ctk.CTkFont(size=12, weight="bold"), anchor="w",
+                card.status_frame,
+                text=badge_text,
+                text_color=badge_color,
+                font=ctk.CTkFont(size=12, weight="bold"),
+                anchor="w",
             ).pack(anchor="w", pady=(2, 0))
         elif summary.project.id in self._parked_map:
             parked_seconds = self._parked_map[summary.project.id]
             if parked_seconds > 0:
                 ctk.CTkLabel(
                     card.status_frame,
-                    text=f"\u23F8  {format_duration(parked_seconds)} parked",
-                    text_color="#ffb74d", font=ctk.CTkFont(size=12), anchor="w",
+                    text=f"\u23f8  {format_duration(parked_seconds)} parked",
+                    text_color="#ffb74d",
+                    font=ctk.CTkFont(size=12),
+                    anchor="w",
                 ).pack(anchor="w", pady=(2, 0))
         if card.status_frame.winfo_children():
             card.status_frame.pack(anchor="w")
@@ -413,39 +608,57 @@ class Dashboard(ctk.CTkFrame):
         else:
             card.meta_label.pack(anchor="w", pady=(4, 0))
 
-        goal_minutes = summary.project.daily_goal_minutes
-        if goal_minutes > 0 and card.goal_frame is None:
+        # Goals: daily + weekly + monthly (if set), filtered by active days
+        has_any_goal = any(
+            getattr(summary.project, k) > 0
+            for k in ("daily_goal_minutes", "weekly_goal_minutes", "monthly_goal_minutes")
+        )
+        if has_any_goal and card.goal_frame is None:
             card.goal_frame = ctk.CTkFrame(card.info, fg_color="transparent")
         if card.goal_frame is not None:
             for w in card.goal_frame.winfo_children():
                 w.destroy()
-            if goal_minutes > 0:
-                goal_seconds = goal_minutes * 60
-                ratio = min(1.0, summary.today_seconds / goal_seconds) if goal_seconds else 0.0
-                done_today = ratio >= 1.0
-                goal_label = ctk.CTkLabel(
-                    card.goal_frame,
-                    text=(
-                        f"{format_duration(summary.today_seconds)} / {format_duration(goal_seconds)} today"
-                        + ("  \u2713" if done_today else "")
-                    ),
-                    text_color="#66bb6a" if done_today else "gray60",
-                    font=ctk.CTkFont(size=12),
-                    anchor="w",
-                )
-                goal_label.pack(anchor="w", pady=(6, 2))
-                bar = ctk.CTkProgressBar(card.goal_frame, width=280, height=8, corner_radius=4)
-                bar.set(ratio)
-                if done_today:
-                    bar.configure(progress_color="#66bb6a")
-                bar.pack(anchor="w")
+            if has_any_goal:
+                # show active-days hint if restricted
+                if summary.project.goal_days_of_week:
+                    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                    active = ", ".join(day_names[d] for d in summary.project.goal_days_of_week)
+                    ctk.CTkLabel(
+                        card.goal_frame,
+                        text=f"Active: {active}",
+                        text_color="gray55",
+                        font=ctk.CTkFont(size=11),
+                        anchor="w",
+                    ).pack(anchor="w", pady=(6, 0))
+                for period, label in (("daily", "today"), ("weekly", "this week"), ("monthly", "this month")):
+                    minutes = getattr(summary.project, f"{period}_goal_minutes")
+                    if minutes <= 0:
+                        continue
+                    goal_seconds = minutes * 60
+                    cur = self._projects.project_period_seconds(summary.project.id, period)
+                    ratio = min(1.0, cur / goal_seconds) if goal_seconds else 0.0
+                    done = ratio >= 1.0
+                    goal_label = ctk.CTkLabel(
+                        card.goal_frame,
+                        text=f"{format_duration(cur)} / {format_duration(goal_seconds)} {label}"
+                        + ("  ✓" if done else ""),
+                        text_color="#66bb6a" if done else "gray60",
+                        font=ctk.CTkFont(size=12),
+                        anchor="w",
+                    )
+                    goal_label.pack(anchor="w", pady=(6, 2) if period == "daily" else (2, 2))
+                    bar = ctk.CTkProgressBar(card.goal_frame, width=280, height=8, corner_radius=4)
+                    bar.set(ratio)
+                    if done:
+                        bar.configure(progress_color="#66bb6a")
+                    bar.pack(anchor="w")
                 card.goal_frame.pack(anchor="w")
             else:
                 card.goal_frame.pack_forget()
 
-        work_label = "\u23F1  Focus"
+        work_label = "\u23f1  Focus"
         if self._active_project_id is not None and summary.project.id != self._active_project_id:
-            work_label = "\u21C4  Switch"
+            work_label = "\u21c4  Switch"
         card.work_button.configure(text=work_label)
 
         if not card.click_set:
@@ -465,6 +678,7 @@ class Dashboard(ctk.CTkFrame):
 
     def _update_card(self, card, summary) -> None:
         self._populate_card(card, summary, build=False)
+
     def _ask_save_path(self, default_name: str, file_types: list[tuple[str, str]]) -> str | None:
         return filedialog.asksaveasfilename(
             parent=self,

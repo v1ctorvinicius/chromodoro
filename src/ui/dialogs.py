@@ -21,12 +21,15 @@ class ProjectFormDialog(ctk.CTkToplevel):
         name: str = "",
         description: str = "",
         daily_goal_minutes: float = 0.0,
+        weekly_goal_minutes: float = 0.0,
+        monthly_goal_minutes: float = 0.0,
+        goal_days_of_week: list[int] | None = None,
     ):
         super().__init__(parent)
         self.title(title)
-        self.geometry("460x470")
+        self.geometry("520x620")
         self.resizable(False, False)
-        self.result: tuple[str, str, float] | None = None
+        self.result: tuple[str, str, float, float, float, list[int] | None] | None = None
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(3, weight=1)
@@ -38,27 +41,66 @@ class ProjectFormDialog(ctk.CTkToplevel):
 
         description_label = ctk.CTkLabel(self, text="Description", anchor="w")
         description_label.grid(row=2, column=0, padx=24, pady=(0, 4), sticky="ew")
-        self._description_box = ctk.CTkTextbox(self, height=100, font=ctk.CTkFont(size=13))
+        self._description_box = ctk.CTkTextbox(self, height=80, font=ctk.CTkFont(size=13))
         if description:
             self._description_box.insert("1.0", description)
         self._description_box.grid(row=3, column=0, padx=24, pady=(0, 6), sticky="nsew")
 
-        ctk.CTkLabel(
-            self, text="Daily goal (minutes per day, empty = none)", anchor="w"
-        ).grid(row=4, column=0, padx=24, pady=(6, 4), sticky="ew")
-        self._goal_entry = ctk.CTkEntry(self, height=34)
+        # Goals row
+        ctk.CTkLabel(self, text="Goals (minutes, empty = none)", anchor="w").grid(
+            row=4, column=0, padx=24, pady=(6, 4), sticky="ew"
+        )
+        goals_frame = ctk.CTkFrame(self, fg_color="transparent")
+        goals_frame.grid(row=5, column=0, padx=24, sticky="ew")
+        goals_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        ctk.CTkLabel(goals_frame, text="Daily", anchor="w", font=ctk.CTkFont(size=12)).grid(
+            row=0, column=0, sticky="ew", padx=(0, 6)
+        )
+        ctk.CTkLabel(goals_frame, text="Weekly", anchor="w", font=ctk.CTkFont(size=12)).grid(
+            row=0, column=1, sticky="ew", padx=6
+        )
+        ctk.CTkLabel(goals_frame, text="Monthly", anchor="w", font=ctk.CTkFont(size=12)).grid(
+            row=0, column=2, sticky="ew", padx=(6, 0)
+        )
+        self._daily_entry = ctk.CTkEntry(goals_frame, height=32)
         if daily_goal_minutes:
-            self._goal_entry.insert(0, str(int(daily_goal_minutes)))
-        self._goal_entry.grid(row=5, column=0, padx=24, sticky="ew")
+            self._daily_entry.insert(0, str(int(daily_goal_minutes)))
+        self._daily_entry.grid(row=1, column=0, sticky="ew", padx=(0, 6))
+        self._weekly_entry = ctk.CTkEntry(goals_frame, height=32)
+        if weekly_goal_minutes:
+            self._weekly_entry.insert(0, str(int(weekly_goal_minutes)))
+        self._weekly_entry.grid(row=1, column=1, sticky="ew", padx=6)
+        self._monthly_entry = ctk.CTkEntry(goals_frame, height=32)
+        if monthly_goal_minutes:
+            self._monthly_entry.insert(0, str(int(monthly_goal_minutes)))
+        self._monthly_entry.grid(row=1, column=2, sticky="ew", padx=(6, 0))
+
+        # Days of week - por projeto: vazio = sem dias fixos (flexível)
+        ctk.CTkLabel(self, text="Dias fixos (vazio = sem dias fixos)", anchor="w").grid(
+            row=6, column=0, padx=24, pady=(12, 4), sticky="ew"
+        )
+        days_frame = ctk.CTkFrame(self, fg_color="transparent")
+        days_frame.grid(row=7, column=0, padx=24, sticky="ew")
+        self._day_vars: list[ctk.BooleanVar] = []
+        day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        for i, lbl in enumerate(day_labels):
+            var = ctk.BooleanVar(value=(i in goal_days_of_week) if goal_days_of_week else False)
+            chk = ctk.CTkCheckBox(days_frame, text=lbl, variable=var, width=60)
+            chk.grid(row=0, column=i, padx=2)
+            self._day_vars.append(var)
 
         self._error_label = ctk.CTkLabel(self, text="", text_color="#ef5350", anchor="w", height=18)
-        self._error_label.grid(row=6, column=0, padx=24, sticky="ew")
+        self._error_label.grid(row=8, column=0, padx=24, sticky="ew")
 
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=7, column=0, padx=24, pady=(8, 20), sticky="ew")
+        buttons.grid(row=9, column=0, padx=24, pady=(8, 20), sticky="ew")
         buttons.grid_columnconfigure(0, weight=1)
         ctk.CTkButton(
-            buttons, text="Cancel", width=100, fg_color="transparent", border_width=1,
+            buttons,
+            text="Cancel",
+            width=100,
+            fg_color="transparent",
+            border_width=1,
             command=self.destroy,
         ).grid(row=0, column=1, padx=(8, 0))
         ctk.CTkButton(buttons, text="Save", width=120, command=self._save).grid(row=0, column=2)
@@ -67,27 +109,42 @@ class ProjectFormDialog(ctk.CTkToplevel):
         self._name_entry.focus_set()
         make_modal(self, parent)
 
+    def _parse_goal(self, raw: str, label: str) -> float | None:
+        raw = raw.strip()
+        if not raw:
+            return 0.0
+        try:
+            v = float(raw)
+        except ValueError:
+            self._error_label.configure(text=f"{label} must be a number.")
+            return None
+        if not 0 < v <= 10080:
+            self._error_label.configure(text=f"{label} must be between 1 and 10080.")
+            return None
+        return v
+
     def _save(self) -> None:
         name = self._name_entry.get().strip()
         if not name:
             self._error_label.configure(text="Name is required.")
             return
-        raw_goal = self._goal_entry.get().strip()
-        goal = 0.0
-        if raw_goal:
-            try:
-                goal = float(raw_goal)
-            except ValueError:
-                self._error_label.configure(text="Daily goal must be a number of minutes.")
-                return
-            if not 0 < goal <= 1440:
-                self._error_label.configure(text="Daily goal must be between 1 and 1440 minutes.")
-                return
+        daily = self._parse_goal(self._daily_entry.get(), "Daily goal")
+        if daily is None:
+            return
+        weekly = self._parse_goal(self._weekly_entry.get(), "Weekly goal")
+        if weekly is None:
+            return
+        monthly = self._parse_goal(self._monthly_entry.get(), "Monthly goal")
+        if monthly is None:
+            return
+        # vazio = sem dias fixos (None); 1..7 = dias específicos
+        selected = [i for i, var in enumerate(self._day_vars) if var.get()]
+        days: list[int] | None = selected if selected else None
         description = self._description_box.get("1.0", "end").strip()
-        self.result = (name, description, goal)
+        self.result = (name, description, float(daily), float(weekly), float(monthly), days)
         self.destroy()
 
-    def show(self) -> tuple[str, str, float] | None:
+    def show(self) -> tuple[str, str, float, float, float, list[int] | None] | None:
         self.wait_window()
         return self.result
 
@@ -111,9 +168,7 @@ class TextPromptDialog(ctk.CTkToplevel):
 
         self.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(self, text=label, anchor="w").grid(
-            row=0, column=0, padx=24, pady=(20, 4), sticky="ew"
-        )
+        ctk.CTkLabel(self, text=label, anchor="w").grid(row=0, column=0, padx=24, pady=(20, 4), sticky="ew")
         self._entry = ctk.CTkEntry(self, height=34, font=ctk.CTkFont(size=14))
         self._entry.insert(0, initial)
         self._entry.grid(row=1, column=0, padx=24, pady=(0, 6), sticky="ew")
@@ -125,7 +180,11 @@ class TextPromptDialog(ctk.CTkToplevel):
         buttons.grid(row=3, column=0, padx=24, pady=(6, 18), sticky="ew")
         buttons.grid_columnconfigure(0, weight=1)
         ctk.CTkButton(
-            buttons, text="Cancel", width=100, fg_color="transparent", border_width=1,
+            buttons,
+            text="Cancel",
+            width=100,
+            fg_color="transparent",
+            border_width=1,
             command=self.destroy,
         ).grid(row=0, column=1, padx=(8, 0))
         ctk.CTkButton(buttons, text=ok_text, width=120, command=self._save).grid(row=0, column=2)
@@ -170,16 +229,26 @@ class InterruptDialog(ctk.CTkToplevel):
         actions = ctk.CTkFrame(self, fg_color="transparent")
         actions.grid(row=3, column=0, pady=(0, 24))
         register_button = ctk.CTkButton(
-            actions, text=f"Register {elapsed_text}", width=160,
+            actions,
+            text=f"Register {elapsed_text}",
+            width=160,
             command=lambda: self._choose("register"),
         )
         register_button.pack(side="left", padx=6)
         ctk.CTkButton(
-            actions, text="Discard", width=90, fg_color="transparent", border_width=1,
+            actions,
+            text="Discard",
+            width=90,
+            fg_color="transparent",
+            border_width=1,
             command=lambda: self._choose("discard"),
         ).pack(side="left", padx=6)
         ctk.CTkButton(
-            actions, text="Keep going", width=110, fg_color="transparent", border_width=1,
+            actions,
+            text="Keep going",
+            width=110,
+            fg_color="transparent",
+            border_width=1,
             command=lambda: self._choose("continue"),
         ).pack(side="left", padx=6)
 
@@ -213,9 +282,9 @@ class RecoveryDialog(ctk.CTkToplevel):
         ctk.CTkLabel(self, text=f"Started at {started_text}", text_color="gray70").grid(
             row=2, column=0, pady=2
         )
-        ctk.CTkLabel(
-            self, text=f"{elapsed_text} focused until now", text_color="gray70"
-        ).grid(row=3, column=0, pady=2)
+        ctk.CTkLabel(self, text=f"{elapsed_text} focused until now", text_color="gray70").grid(
+            row=3, column=0, pady=2
+        )
 
         actions = ctk.CTkFrame(self, fg_color="transparent")
         actions.grid(row=4, column=0, pady=(22, 24))
@@ -223,11 +292,19 @@ class RecoveryDialog(ctk.CTkToplevel):
             side="left", padx=6
         )
         ctk.CTkButton(
-            actions, text="Log & end", width=110, fg_color="transparent", border_width=1,
+            actions,
+            text="Log & end",
+            width=110,
+            fg_color="transparent",
+            border_width=1,
             command=lambda: self._choose("finish"),
         ).pack(side="left", padx=6)
         ctk.CTkButton(
-            actions, text="Discard", width=90, fg_color="transparent", border_width=1,
+            actions,
+            text="Discard",
+            width=90,
+            fg_color="transparent",
+            border_width=1,
             command=lambda: self._choose("discard"),
         ).pack(side="left", padx=6)
 
@@ -251,9 +328,9 @@ class SwitchProjectDialog(ctk.CTkToplevel):
         self.geometry("320x260")
         self.resizable(False, False)
 
-        ctk.CTkLabel(
-            self, text="Switch to:", font=ctk.CTkFont(size=14, weight="bold")
-        ).pack(padx=20, pady=(16, 8), anchor="w")
+        ctk.CTkLabel(self, text="Switch to:", font=ctk.CTkFont(size=14, weight="bold")).pack(
+            padx=20, pady=(16, 8), anchor="w"
+        )
 
         scroll = ctk.CTkScrollableFrame(self, fg_color="transparent", height=180)
         scroll.pack(fill="x", padx=20)

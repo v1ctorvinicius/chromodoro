@@ -84,7 +84,7 @@ class SettingsDialog(ctk.CTkToplevel):
         ).grid(row=len(FIELDS) * 2 + 3, column=0, sticky="w", pady=(10, 0))
         ctk.CTkButton(
             form,
-            text="\u266A  Test sound",
+            text="\u266a  Test sound",
             width=110,
             height=28,
             fg_color="transparent",
@@ -100,7 +100,11 @@ class SettingsDialog(ctk.CTkToplevel):
         buttons.grid(row=4, column=0, padx=28, pady=(8, 20), sticky="ew")
         buttons.grid_columnconfigure(0, weight=1)
         ctk.CTkButton(
-            buttons, text="Cancel", width=100, fg_color="transparent", border_width=1,
+            buttons,
+            text="Cancel",
+            width=100,
+            fg_color="transparent",
+            border_width=1,
             command=self.destroy,
         ).grid(row=0, column=1, padx=(8, 0))
         ctk.CTkButton(buttons, text="Save", width=120, command=self._save).grid(row=0, column=2)

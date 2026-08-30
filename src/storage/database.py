@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS settings (
 """,
     3: "ALTER TABLE projects ADD COLUMN daily_goal_minutes REAL NOT NULL DEFAULT 0;",
     4: "ALTER TABLE sessions ADD COLUMN target_seconds REAL NOT NULL DEFAULT 0;",
+    5: "ALTER TABLE projects ADD COLUMN weekly_goal_minutes REAL NOT NULL DEFAULT 0;",
+    6: "ALTER TABLE projects ADD COLUMN monthly_goal_minutes REAL NOT NULL DEFAULT 0;",
+    7: "ALTER TABLE projects ADD COLUMN goal_days_of_week TEXT NOT NULL DEFAULT '';",
 }
 
 
@@ -106,6 +109,24 @@ def _to_int(row_value: int | None) -> int:
     return row_value
 
 
+def _parse_days(value: str | None) -> list[int] | None:
+    if not value:
+        return None
+    try:
+        parts = [p.strip() for p in value.split(",") if p.strip() != ""]
+        days = [int(p) for p in parts if p.isdigit() or (p.lstrip("-").isdigit())]
+        days = [d for d in days if 0 <= d <= 6]
+        return sorted(set(days)) or None
+    except Exception:
+        return None
+
+
+def _serialize_days(days: list[int] | None) -> str:
+    if not days:
+        return ""
+    return ",".join(str(d) for d in sorted(set(days)) if 0 <= d <= 6)
+
+
 def _row_to_project(row: sqlite3.Row) -> Project:
     return Project(
         id=_to_int(row["id"]),
@@ -114,6 +135,13 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         status=row["status"],
         created_at=_to_dt_required(row["created_at"]),
         daily_goal_minutes=float(row["daily_goal_minutes"]),
+        weekly_goal_minutes=float(row["weekly_goal_minutes"]) if "weekly_goal_minutes" in row.keys() else 0.0,
+        monthly_goal_minutes=float(row["monthly_goal_minutes"])
+        if "monthly_goal_minutes" in row.keys()
+        else 0.0,
+        goal_days_of_week=_parse_days(row["goal_days_of_week"])
+        if "goal_days_of_week" in row.keys()
+        else None,
     )
 
 
@@ -156,9 +184,33 @@ class Database:
         for version in sorted(_MIGRATIONS):
             if version <= current:
                 continue
-            self._conn.executescript(_MIGRATIONS[version])
+            try:
+                self._conn.executescript(_MIGRATIONS[version])
+            except sqlite3.OperationalError as e:
+                # idempotent: ignore duplicate column errors on re-run
+                if "duplicate column" not in str(e).lower():
+                    raise
             self._conn.execute(f"PRAGMA user_version = {version}")
             self._conn.commit()
+        # safety: ensure new goal columns exist even if version was bumped
+        cols = {r[1] for r in self._conn.execute("PRAGMA table_info(projects)").fetchall()}
+        for col, ddl in [
+            (
+                "weekly_goal_minutes",
+                "ALTER TABLE projects ADD COLUMN weekly_goal_minutes REAL NOT NULL DEFAULT 0",
+            ),
+            (
+                "monthly_goal_minutes",
+                "ALTER TABLE projects ADD COLUMN monthly_goal_minutes REAL NOT NULL DEFAULT 0",
+            ),
+            (
+                "goal_days_of_week",
+                "ALTER TABLE projects ADD COLUMN goal_days_of_week TEXT NOT NULL DEFAULT ''",
+            ),
+        ]:
+            if col not in cols:
+                self._conn.execute(ddl)
+                self._conn.commit()
 
     @property
     def schema_version(self) -> int:
@@ -182,14 +234,18 @@ class Database:
     def insert_project(self, project: Project) -> Project:
         now = _to_str(project.created_at) or datetime.now().isoformat(timespec="seconds")
         cur = self._conn.execute(
-            "INSERT INTO projects (name, description, status, created_at, daily_goal_minutes)"
-            " VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO projects (name, description, status, created_at, "
+            "daily_goal_minutes, weekly_goal_minutes, monthly_goal_minutes, "
+            "goal_days_of_week) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 project.name,
                 project.description,
                 project.status,
                 now,
                 project.daily_goal_minutes,
+                project.weekly_goal_minutes,
+                project.monthly_goal_minutes,
+                _serialize_days(project.goal_days_of_week),
             ),
         )
         self._conn.commit()
@@ -204,8 +260,19 @@ class Database:
 
     def update_project(self, project: Project) -> None:
         self._conn.execute(
-            "UPDATE projects SET name = ?, description = ?, status = ?, daily_goal_minutes = ? WHERE id = ?",
-            (project.name, project.description, project.status, project.daily_goal_minutes, project.id),
+            "UPDATE projects SET name = ?, description = ?, status = ?, "
+            "daily_goal_minutes = ?, weekly_goal_minutes = ?, "
+            "monthly_goal_minutes = ?, goal_days_of_week = ? WHERE id = ?",
+            (
+                project.name,
+                project.description,
+                project.status,
+                project.daily_goal_minutes,
+                project.weekly_goal_minutes,
+                project.monthly_goal_minutes,
+                _serialize_days(project.goal_days_of_week),
+                project.id,
+            ),
         )
         self._conn.commit()
 
@@ -371,16 +438,14 @@ class Database:
 
     def count_contributions(self, project_id: int) -> int:
         row = self._conn.execute(
-            "SELECT COUNT(*) AS total FROM contributions"
-            " WHERE project_id = ? AND session_id IS NOT NULL",
+            "SELECT COUNT(*) AS total FROM contributions WHERE project_id = ? AND session_id IS NOT NULL",
             (project_id,),
         ).fetchone()
         return int(row["total"])
 
     def count_notes(self, project_id: int) -> int:
         row = self._conn.execute(
-            "SELECT COUNT(*) AS total FROM contributions"
-            " WHERE project_id = ? AND session_id IS NULL",
+            "SELECT COUNT(*) AS total FROM contributions WHERE project_id = ? AND session_id IS NULL",
             (project_id,),
         ).fetchone()
         return int(row["total"])
@@ -401,7 +466,9 @@ class Database:
 
     def project_summary_rows(self, status: str, today_boundary: datetime) -> list[sqlite3.Row]:
         return self._conn.execute(
-            f"SELECT p.id, p.name, p.description, p.status, p.created_at, p.daily_goal_minutes,"
+            f"SELECT p.id, p.name, p.description, p.status, p.created_at, "
+            f"p.daily_goal_minutes, p.weekly_goal_minutes, "
+            f"p.monthly_goal_minutes, p.goal_days_of_week,"
             f" COALESCE(agg.total_seconds, 0) AS total_seconds,"
             f" COALESCE(agg.session_count, 0) AS session_count,"
             f" (SELECT COUNT(*) FROM contributions c WHERE c.project_id = p.id"
@@ -441,9 +508,7 @@ class Database:
         ).fetchall()
         with open(path, "w", newline="", encoding="utf-8-sig") as fh:
             writer = csv.writer(fh)
-            writer.writerow(
-                ["started_at", "ended_at", "minutes", "pause_minutes", "status", "project"]
-            )
+            writer.writerow(["started_at", "ended_at", "minutes", "pause_minutes", "status", "project"])
             for row in rows:
                 writer.writerow(
                     [

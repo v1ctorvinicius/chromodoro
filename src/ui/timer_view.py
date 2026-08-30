@@ -122,8 +122,11 @@ class TimerView(ctk.CTkFrame):
 
     def _header(self) -> None:
         ctk.CTkLabel(
-            self._content, text=self._project.name.upper(), text_color="gray55",
-            font=ctk.CTkFont(size=15, weight="bold"), text_color_disabled="gray",
+            self._content,
+            text=self._project.name.upper(),
+            text_color="gray55",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color_disabled="gray",
         ).grid(row=0, column=0, pady=(8, 2))
 
     def _clock_and_progress(self) -> None:
@@ -166,14 +169,14 @@ class TimerView(ctk.CTkFrame):
                     text=f"This project has a paused session · {parked_line}",
                     text_color="gray60",
                 ).grid(row=2, column=0, pady=(0, 6))
-                button_text = f"\u21C4  Switch & resume ({format_duration(parked.duration)})"
+                button_text = f"\u21c4  Switch & resume ({format_duration(parked.duration)})"
             else:
                 ctk.CTkLabel(
                     self._content,
                     text=f"Current focus: {other_name}. Your progress there stays safe.",
                     text_color="gray60",
                 ).grid(row=2, column=0, pady=(0, 6))
-                button_text = f"\u21C4  Switch to {self._project.name}"
+                button_text = f"\u21c4  Switch to {self._project.name}"
             ctk.CTkButton(
                 self._content,
                 text=button_text,
@@ -196,7 +199,7 @@ class TimerView(ctk.CTkFrame):
             ).grid(row=2, column=0, pady=(0, 6))
             ctk.CTkButton(
                 self._content,
-                text=f"\u25B6  Resume session ({format_duration(parked.duration)})",
+                text=f"\u25b6  Resume session ({format_duration(parked.duration)})",
                 width=300,
                 height=46,
                 font=ctk.CTkFont(size=15, weight="bold"),
@@ -204,8 +207,13 @@ class TimerView(ctk.CTkFrame):
             ).grid(row=3, column=0, pady=(16, 0))
             ctk.CTkButton(
                 self._content,
-                text="Start new session instead", width=200, height=28, fg_color="transparent",
-                text_color="gray60", border_width=0, hover_color=("gray92", "gray17"),
+                text="Start new session instead",
+                width=200,
+                height=28,
+                fg_color="transparent",
+                text_color="gray60",
+                border_width=0,
+                hover_color=("gray92", "gray17"),
                 command=self._start_now,
             ).grid(row=4, column=0, pady=(8, 0))
         else:
@@ -217,7 +225,7 @@ class TimerView(ctk.CTkFrame):
             ).grid(row=1, column=0, pady=(14, 4))
             ctk.CTkButton(
                 self._content,
-                text="\u25B6  Start focus",
+                text="\u25b6  Start focus",
                 width=220,
                 height=46,
                 font=ctk.CTkFont(size=15, weight="bold"),
@@ -226,8 +234,13 @@ class TimerView(ctk.CTkFrame):
 
         ctk.CTkButton(
             self._content,
-            text="< Back to project", width=160, height=28, fg_color="transparent",
-            text_color="gray60", border_width=0, hover_color=("gray92", "gray17"),
+            text="< Back to project",
+            width=160,
+            height=28,
+            fg_color="transparent",
+            text_color="gray60",
+            border_width=0,
+            hover_color=("gray92", "gray17"),
             command=self._on_exit_project,
         ).grid(row=5, column=0, pady=(26, 0))
 
@@ -251,20 +264,36 @@ class TimerView(ctk.CTkFrame):
         links = ctk.CTkFrame(self._content, fg_color="transparent")
         links.grid(row=row, column=0, pady=(18, 0))
         ctk.CTkButton(
-            links, text="< Back to project", width=150, height=28, fg_color="transparent",
-            text_color="gray60", border_width=0, hover_color=("gray92", "gray17"),
+            links,
+            text="< Back to project",
+            width=150,
+            height=28,
+            fg_color="transparent",
+            text_color="gray60",
+            border_width=0,
+            hover_color=("gray92", "gray17"),
             command=self._on_exit_project,
         ).pack(side="left", padx=6)
         ctk.CTkButton(
-            links, text="All projects", width=120, height=28, fg_color="transparent",
-            text_color="gray60", border_width=0, hover_color=("gray92", "gray17"),
+            links,
+            text="All projects",
+            width=120,
+            height=28,
+            fg_color="transparent",
+            text_color="gray60",
+            border_width=0,
+            hover_color=("gray92", "gray17"),
             command=self._on_all_projects,
         ).pack(side="left", padx=6)
         if self._on_toggle_mini is not None:
             ctk.CTkButton(
-                links, text="\u25A1 Mini Widget", width=90, height=28,
+                links,
+                text="\u25a1 Mini Widget",
+                width=90,
+                height=28,
                 fg_color=("#4a6fa5", "#3a5a8a"),
-                text_color="white", hover_color=("#3a5a8a", "#2a4a7a"),
+                text_color="white",
+                hover_color=("#3a5a8a", "#2a4a7a"),
                 command=self._on_toggle_mini,
             ).pack(side="left", padx=6)
 
@@ -287,7 +316,7 @@ class TimerView(ctk.CTkFrame):
             return
         self._switch_labels = {label: pid for pid, label in targets}
         if not hasattr(self, "_switch_var"):
-            self._switch_var = ctk.StringVar(master=self, value="\u21C4  Switch project")
+            self._switch_var = ctk.StringVar(master=self, value="\u21c4  Switch project")
         ctk.CTkOptionMenu(
             self._content,
             values=list(self._switch_labels.keys()),
@@ -311,7 +340,9 @@ class TimerView(ctk.CTkFrame):
     def _render_running(self) -> None:
         self._header()
         ctk.CTkLabel(
-            self._content, text="FOCUS", text_color="#66bb6a",
+            self._content,
+            text="FOCUS",
+            text_color="#66bb6a",
             font=ctk.CTkFont(size=13, weight="bold"),
         ).grid(row=1, column=0, pady=(14, 4))
         self._cycle_label()
@@ -323,8 +354,14 @@ class TimerView(ctk.CTkFrame):
             side="left", padx=6
         )
         ctk.CTkButton(
-            actions, text="End session", width=130, height=38, fg_color="transparent",
-            border_width=1, border_color=("gray60", "gray35"), command=self._end_clicked,
+            actions,
+            text="End session",
+            width=130,
+            height=38,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray60", "gray35"),
+            command=self._end_clicked,
         ).pack(side="left", padx=6)
         self._shortcut_hint()
         self._switch_button()
@@ -333,7 +370,9 @@ class TimerView(ctk.CTkFrame):
     def _render_paused(self) -> None:
         self._header()
         ctk.CTkLabel(
-            self._content, text="PAUSED", text_color="#ffb74d",
+            self._content,
+            text="PAUSED",
+            text_color="#ffb74d",
             font=ctk.CTkFont(size=13, weight="bold"),
         ).grid(row=1, column=0, pady=(14, 4))
         self._cycle_label()
@@ -345,8 +384,14 @@ class TimerView(ctk.CTkFrame):
             side="left", padx=6
         )
         ctk.CTkButton(
-            actions, text="End session", width=130, height=38, fg_color="transparent",
-            border_width=1, border_color=("gray60", "gray35"), command=self._end_clicked,
+            actions,
+            text="End session",
+            width=130,
+            height=38,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray60", "gray35"),
+            command=self._end_clicked,
         ).pack(side="left", padx=6)
         self._shortcut_hint()
         self._switch_button()
@@ -392,13 +437,19 @@ class TimerView(ctk.CTkFrame):
         break_seconds = self._sessions.peek_break_seconds()
         break_minutes = int(round(break_seconds / 60))
         break_label = (
-            f"Long break \u25B8 {break_minutes} min"
+            f"Long break \u25b8 {break_minutes} min"
             if self._sessions.completed_cycles >= self._sessions.config.cycles_before_long_break
-            else f"Take a break \u25B8 {break_minutes} min"
+            else f"Take a break \u25b8 {break_minutes} min"
         )
         ctk.CTkButton(
-            actions, text=break_label, width=190, height=38, fg_color="transparent",
-            border_width=1, border_color=("gray60", "gray35"), command=self._start_break,
+            actions,
+            text=break_label,
+            width=190,
+            height=38,
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray60", "gray35"),
+            command=self._start_break,
         ).pack(side="left", padx=6)
 
         def add() -> None:
@@ -415,8 +466,13 @@ class TimerView(ctk.CTkFrame):
 
         ctk.CTkButton(
             self._content,
-            text="< Back to project", width=160, height=28, fg_color="transparent",
-            text_color="gray60", border_width=0, hover_color=("gray92", "gray17"),
+            text="< Back to project",
+            width=160,
+            height=28,
+            fg_color="transparent",
+            text_color="gray60",
+            border_width=0,
+            hover_color=("gray92", "gray17"),
             command=self._on_exit_project,
         ).grid(row=5, column=0, pady=(26, 0))
 
@@ -449,24 +505,40 @@ class TimerView(ctk.CTkFrame):
         ctk.CTkLabel(self._content, text="Break finished.", font=ctk.CTkFont(size=22, weight="bold")).grid(
             row=0, column=0, pady=(48, 4)
         )
-        ctk.CTkLabel(
-            self._content, text="Ready for another round of focus?", text_color="gray60"
-        ).grid(row=1, column=0)
+        ctk.CTkLabel(self._content, text="Ready for another round of focus?", text_color="gray60").grid(
+            row=1, column=0
+        )
 
         ctk.CTkButton(
-            self._content, text="\u25B6  Work again", width=220, height=44,
-            font=ctk.CTkFont(size=15, weight="bold"), command=self._work_again,
+            self._content,
+            text="\u25b6  Work again",
+            width=220,
+            height=44,
+            font=ctk.CTkFont(size=15, weight="bold"),
+            command=self._work_again,
         ).grid(row=3, column=0, pady=(24, 6))
 
         links = ctk.CTkFrame(self._content, fg_color="transparent")
         links.grid(row=4, column=0, pady=(16, 0))
         ctk.CTkButton(
-            links, text="Back to project", width=150, height=28, fg_color="transparent",
-            text_color="gray60", hover_color=("gray92", "gray17"), command=self._on_exit_project,
+            links,
+            text="Back to project",
+            width=150,
+            height=28,
+            fg_color="transparent",
+            text_color="gray60",
+            hover_color=("gray92", "gray17"),
+            command=self._on_exit_project,
         ).pack(side="left", padx=6)
         ctk.CTkButton(
-            links, text="All projects", width=120, height=28, fg_color="transparent",
-            text_color="gray60", hover_color=("gray92", "gray17"), command=self._on_all_projects,
+            links,
+            text="All projects",
+            width=120,
+            height=28,
+            fg_color="transparent",
+            text_color="gray60",
+            hover_color=("gray92", "gray17"),
+            command=self._on_all_projects,
         ).pack(side="left", padx=6)
 
     def _pause_clicked(self) -> None:
