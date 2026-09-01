@@ -20,6 +20,7 @@ class SettingsService:
                 auto_start_after_break=self._bool_setting("auto_start_after_break", False),
                 close_to_tray=self._bool_setting("close_to_tray", True),
                 start_in_tray=self._bool_setting("start_in_tray", False),
+                start_filter_current_day=self._bool_setting("start_filter_current_day", False),
             )
         return self._cache
 
@@ -34,6 +35,7 @@ class SettingsService:
             auto_start_after_break=settings.auto_start_after_break,
             close_to_tray=settings.close_to_tray,
             start_in_tray=settings.start_in_tray,
+            start_filter_current_day=settings.start_filter_current_day,
         )
         for key, value in (
             ("work_minutes", validated.work_minutes),
@@ -44,6 +46,7 @@ class SettingsService:
             ("auto_start_after_break", int(validated.auto_start_after_break)),
             ("close_to_tray", int(validated.close_to_tray)),
             ("start_in_tray", int(validated.start_in_tray)),
+            ("start_filter_current_day", int(validated.start_filter_current_day)),
         ):
             self._db.set_setting(key, str(value))
         if previous is not None and (previous.cycles_before_long_break != validated.cycles_before_long_break):

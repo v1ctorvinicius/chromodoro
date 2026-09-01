@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 
 from domain.project import Project
 from domain.settings import AppSettings

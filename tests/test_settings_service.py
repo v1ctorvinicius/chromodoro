@@ -80,3 +80,10 @@ def test_sound_flag_accepts_text_forms(db):
     for raw, expected in (("1", True), ("0", False), ("true", True), ("off", False)):
         db.set_setting("sound_alerts", raw)
         assert SettingsService(db).load().sound_alerts is expected
+
+
+def test_start_filter_current_day_persists(db):
+    service = SettingsService(db)
+    saved = service.save(AppSettings(start_filter_current_day=True))
+    assert saved.start_filter_current_day is True
+    assert SettingsService(db).load().start_filter_current_day is True

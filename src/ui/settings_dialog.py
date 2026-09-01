@@ -21,8 +21,8 @@ class SettingsDialog(ctk.CTkToplevel):
     def __init__(self, parent, settings: AppSettings):
         super().__init__(parent)
         self.title("Timer settings")
-        self.geometry("440x640")
-        self.minsize(440, 640)
+        self.geometry("460x720")
+        self.minsize(460, 720)
         self.resizable(True, True)
         self.result: AppSettings | None = None
         self._entries: dict[str, ctk.CTkEntry] = {}
@@ -30,6 +30,7 @@ class SettingsDialog(ctk.CTkToplevel):
         self._auto_var = ctk.BooleanVar(master=self, value=settings.auto_start_after_break)
         self._tray_var = ctk.BooleanVar(master=self, value=settings.close_to_tray)
         self._start_tray_var = ctk.BooleanVar(master=self, value=settings.start_in_tray)
+        self._start_day_var = ctk.BooleanVar(master=self, value=settings.start_filter_current_day)
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
@@ -82,6 +83,13 @@ class SettingsDialog(ctk.CTkToplevel):
             checkbox_width=20,
             checkbox_height=20,
         ).grid(row=len(FIELDS) * 2 + 3, column=0, sticky="w", pady=(10, 0))
+        ctk.CTkCheckBox(
+            form,
+            text="Start dashboard filtered by today's weekday",
+            variable=self._start_day_var,
+            checkbox_width=20,
+            checkbox_height=20,
+        ).grid(row=len(FIELDS) * 2 + 4, column=0, sticky="w", pady=(10, 0))
         ctk.CTkButton(
             form,
             text="\u266a  Test sound",
@@ -91,7 +99,7 @@ class SettingsDialog(ctk.CTkToplevel):
             border_width=1,
             border_color=("gray60", "gray35"),
             command=self._test_sound,
-        ).grid(row=len(FIELDS) * 2 + 4, column=0, sticky="w", pady=(8, 0))
+        ).grid(row=len(FIELDS) * 2 + 5, column=0, sticky="w", pady=(8, 0))
 
         self._error_label = ctk.CTkLabel(self, text="", text_color="#ef5350", anchor="w", height=18)
         self._error_label.grid(row=3, column=0, padx=28, sticky="ew")
@@ -132,6 +140,7 @@ class SettingsDialog(ctk.CTkToplevel):
             auto_start_after_break=bool(self._auto_var.get()),
             close_to_tray=bool(self._tray_var.get()),
             start_in_tray=bool(self._start_tray_var.get()),
+            start_filter_current_day=bool(self._start_day_var.get()),
         )
         self.destroy()
 

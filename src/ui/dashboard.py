@@ -27,6 +27,7 @@ class Dashboard(ctk.CTkFrame):
         focus_bar_fn=None,
         on_quit=None,
         on_widget=None,
+        initial_day: str | None = None,
     ):
         super().__init__(master, fg_color="transparent")
         self._projects = project_service
@@ -53,12 +54,14 @@ class Dashboard(ctk.CTkFrame):
         self._build_header()
         self._build_body()
         self._build_footer()
+        if initial_day in ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Every day"):
+            self._day_var.set(initial_day)
         self._summaries_all = project_service.list_summaries()
         self.update_state(active_project_id, active_state, parked_map)
 
     def _build_header(self) -> None:
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=32, pady=(24, 12))
+        header.grid(row=0, column=0, sticky="ew", padx=32, pady=(16, 10))
         header.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(header, text="Projects", font=ctk.CTkFont(size=28, weight="bold")).grid(
             row=0, column=0, sticky="w"
@@ -82,10 +85,33 @@ class Dashboard(ctk.CTkFrame):
             row=0, column=3, padx=(16, 0)
         )
 
-        # Filter bar
+        # Day selector — primary filter (week/routine planner)
+        day_row = ctk.CTkFrame(header, fg_color=("gray92", "gray20"), corner_radius=10)
+        day_row.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(12, 0))
+        day_row.grid_columnconfigure(0, weight=0)
+        ctk.CTkLabel(
+            day_row,
+            text="Day  ",
+            text_color=("gray30", "gray75"),
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).grid(row=0, column=0, padx=(12, 6), pady=6)
+
+        day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        self._day_var = ctk.StringVar(value="Any")
+        segment = ctk.CTkSegmentedButton(
+            day_row,
+            values=["Any", "Every day"] + day_names,
+            variable=self._day_var,
+            command=lambda _: self._refresh_cards(),
+            font=ctk.CTkFont(size=12),
+        )
+        segment.grid(row=0, column=1, padx=(0, 12), pady=6, sticky="w")
+        self._day_segment = segment
+
+        # Secondary filters
         filt = ctk.CTkFrame(header, fg_color="transparent")
-        filt.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(12, 0))
-        for c in range(8):
+        filt.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(8, 0))
+        for c in range(10):
             filt.grid_columnconfigure(c, weight=0)
 
         ctk.CTkLabel(filt, text="Period:", text_color="gray60", font=ctk.CTkFont(size=12)).grid(
@@ -338,6 +364,7 @@ class Dashboard(ctk.CTkFrame):
         filt = self._filter_var.get().strip().lower() if hasattr(self, "_filter_var") else ""
         period = self._period_var.get() if hasattr(self, "_period_var") else "All time"
         goal_f = self._goal_filter_var.get() if hasattr(self, "_goal_filter_var") else "All"
+        day_f = self._day_var.get() if hasattr(self, "_day_var") else "Any"
         activity = self._activity_var.get() if hasattr(self, "_activity_var") else "All"
         sort_key = self._sort_var.get() if hasattr(self, "_sort_var") else "Last activity"
 
@@ -345,11 +372,21 @@ class Dashboard(ctk.CTkFrame):
         today = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_start = today - timedelta(days=today.weekday())
         month_start = today.replace(day=1)
+        day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
         out = []
         for s in self._summaries_all:
             if filt and filt not in s.project.name.lower():
                 continue
+            # day-of-week filter (projects with that day marked as active)
+            if day_f == "Every day":
+                if s.project.goal_days_of_week != [0, 1, 2, 3, 4, 5, 6]:
+                    continue
+            elif day_f != "Any":
+                idx = day_names.index(day_f)
+                days = s.project.goal_days_of_week
+                if not days or idx not in days:
+                    continue
             # period filter (calendar)
             if period != "All time":
                 la = s.last_activity

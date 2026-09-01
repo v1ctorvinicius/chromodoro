@@ -61,9 +61,7 @@ def test_project_stats_counts_only_counted_sessions(clock, db):
     counted = add_session(db, project.id, now.replace(hour=9), 1500.0, SessionStatus.COMPLETED)
     add_session(db, project.id, now.replace(hour=11), 780.0, SessionStatus.INTERRUPTED)
     add_session(db, project.id, now.replace(hour=13), 999.0, SessionStatus.CANCELLED)
-    db.insert_contribution(
-        Contribution(project_id=project.id, title="C", created_at=now, session_id=counted)
-    )
+    db.insert_contribution(Contribution(project_id=project.id, title="C", created_at=now, session_id=counted))
     db.insert_contribution(Contribution(project_id=project.id, title="N", created_at=now))
 
     stats = services.project_stats(project.id)
@@ -78,9 +76,7 @@ def test_contributions_by_session_groups_correctly(clock, db):
     services = make_projects(db, clock)
     project = services.create_project("P")
     now = clock.now()
-    session_a = Session(
-        project_id=project.id, started_at=now, duration=100.0, status=SessionStatus.COMPLETED
-    )
+    session_a = Session(project_id=project.id, started_at=now, duration=100.0, status=SessionStatus.COMPLETED)
     session_a.id = db.insert_session(session_a)
 
     db.insert_contribution(
@@ -115,7 +111,6 @@ def test_update_project_fields(clock, db):
     stored = db.get_project(updated.id)
     assert stored.name == "Renamed"
     assert stored.description == "Now with description"
-
 
 
 def _goal_service(database, clock):

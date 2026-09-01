@@ -1,6 +1,7 @@
 import atexit
 import time
 import traceback
+from datetime import datetime
 from pathlib import Path
 from tkinter import TclError, messagebox
 
@@ -313,6 +314,9 @@ class ChromodoroApp(ctk.CTk):
         active_pid = active.project_id if active is not None else None
         parked = {pid: seconds for pid, seconds in self._sessions.parked_map().items() if pid != active_pid}
         if self._cached_dashboard is None:
+            initial_day = None
+            if self._settings.load().start_filter_current_day:
+                initial_day = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][datetime.now().weekday()]
             self._cached_dashboard = Dashboard(
                 self,
                 self._projects,
@@ -327,6 +331,7 @@ class ChromodoroApp(ctk.CTk):
                 focus_bar_fn=self._build_focus_bar,
                 on_quit=self._force_quit,
                 on_widget=self._toggle_mini,
+                initial_day=initial_day,
             )
         else:
             self._cached_dashboard._summaries_all = self._projects.list_summaries()

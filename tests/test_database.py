@@ -156,9 +156,7 @@ def test_parked_summaries_latest_per_project(tmp_path):
     first.id = database.insert_session(first)
     second = Session(project_id=alpha.id, started_at=now, duration=180.0)
     second.id = database.insert_session(second)
-    beta_parked = Session(
-        project_id=beta.id, started_at=now, duration=240.0, running_since=None
-    )
+    beta_parked = Session(project_id=beta.id, started_at=now, duration=240.0, running_since=None)
     beta_parked.id = database.insert_session(beta_parked)
 
     parked = database.parked_summaries()
@@ -231,9 +229,7 @@ def test_notes_are_separated_from_contributions(tmp_path):
     database = Database(tmp_path / "a.db")
     project = database.insert_project(Project(name="P"))
     started = datetime(2026, 8, 24, 9, 0, 0)
-    session_id = database.insert_session(
-        Session(project_id=project.id, started_at=started)
-    )
+    session_id = database.insert_session(Session(project_id=project.id, started_at=started))
     real = Contribution(
         project_id=project.id, title="From session", created_at=started, session_id=session_id
     )
